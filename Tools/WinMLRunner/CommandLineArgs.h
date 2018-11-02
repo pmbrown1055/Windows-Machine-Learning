@@ -13,6 +13,7 @@ public:
     Windows::AI::MachineLearning::LearningModelDeviceKind DeviceKind() const { return m_deviceKind; }
     bool PerfCapture() const { return m_perfCapture; }
     bool EnableDebugOutput() const { return m_debug;  }
+	bool PerIterCapture() const { return m_perIterCapture; }
    
     const std::wstring& ImagePath() const { return m_imagePath; }
     const std::wstring& CsvPath() const { return m_csvData; }
@@ -32,6 +33,7 @@ private:
     bool m_useGPU = false;
     bool m_useCPUandGPU = false;
     bool m_debug = false;
+	bool m_perIterCapture = false;
     Windows::AI::MachineLearning::LearningModelDeviceKind m_deviceKind = Windows::AI::MachineLearning::LearningModelDeviceKind::DirectX;
 
     std::wstring m_modelFolderPath;

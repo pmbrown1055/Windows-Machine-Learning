@@ -1,6 +1,7 @@
 #pragma once
 #include "Common.h"
 #include "ModelBinding.h"
+#include "OutputHelper.h"
 using namespace winrt::Windows::Graphics::Imaging;
 using namespace Windows::Media;
 using namespace winrt::Windows::Foundation;
@@ -419,7 +420,130 @@ namespace BindingUtilities
         std::cout << " " << maxKey << " " << maxVal << std::endl;
     }
 
-    void PrintEvaluationResults(LearningModel model, CommandLineArgs args, IMapView<hstring, Windows::Foundation::IInspectable> results)
+	std::string SaveEvaluationResults(LearningModel model, CommandLineArgs args, IMapView<hstring, Windows::Foundation::IInspectable> results, OutputHelper *output, int iteration_no,int &HashCode)
+	{
+		std::string PerIterResult;
+
+		for (auto&& desc : model.OutputFeatures())
+		{
+			if (desc.Kind() == LearningModelFeatureKind::Tensor)
+			{
+				std::wstring name(desc.Name());
+				TensorFeatureDescriptor tensorDescriptor = desc.as<TensorFeatureDescriptor>();
+				TensorKind tensorKind = tensorDescriptor.TensorKind();
+				switch (tensorKind)
+				{
+				case TensorKind::String:
+				{
+					auto resultVector = results.Lookup(desc.Name()).as<TensorString>().GetAsVectorView();
+					//output->WriteFullResultToCSV(resultVector, iteration_no);
+					auto output = resultVector.GetAt(0).data();
+					std::wstring ws(output);
+					std::string xx(ws.begin(), ws.end());
+					PerIterResult = xx;
+				}
+				break;
+				case TensorKind::Float:
+				{
+					auto resultVector = results.Lookup(desc.Name()).as<TensorFloat>().GetAsVectorView();
+
+					output->WriteFullResultToCSV(resultVector, iteration_no);
+					UINT maxIndex = 0;
+					auto maxValue = resultVector.GetAt(0);
+
+					for (UINT i = 0; i < resultVector.Size(); i++)
+					{
+						if (maxValue < resultVector.GetAt(i))
+						{
+							maxValue = resultVector.GetAt(i);
+							maxIndex = i;
+						}
+					}
+					PerIterResult = "Index: " + std::to_string(maxIndex) + "; Value: " + std::to_string(maxValue);
+					int hash = 1;
+					for (int i = 0; i < resultVector.Size(); i++)
+					{
+						float val = resultVector.GetAt(i);
+						int fltAsInt = *(int*)(&val);
+						hash = 31 * hash + fltAsInt;
+					}
+					HashCode =  hash;
+				}
+				break;
+				case TensorKind::Float16:
+				{
+					auto resultVector = results.Lookup(desc.Name()).as<TensorFloat16Bit>().GetAsVectorView();
+					output->WriteFullResultToCSV(resultVector, iteration_no);
+					UINT maxIndex = 0;
+					auto maxValue = resultVector.GetAt(0);
+
+					for (UINT i = 0; i < resultVector.Size(); i++)
+					{
+						if (maxValue < resultVector.GetAt(i))
+						{
+							maxValue = resultVector.GetAt(i);
+							maxIndex = i;
+						}
+					}
+					PerIterResult = "Index: " + std::to_string(maxIndex) + "; Value: " + std::to_string(maxValue);
+					int hash = 1;
+					for (int i = 0; i < resultVector.Size(); i++)
+					{
+						float val = resultVector.GetAt(i);
+						int fltAsInt = *(int*)(&val);
+						hash = 31 * hash + fltAsInt;
+					}
+					HashCode = hash;
+				}
+				break;
+				case TensorKind::Int64:
+				{
+					auto resultVector = results.Lookup(desc.Name()).as<TensorInt64Bit>().GetAsVectorView();
+					output->WriteFullResultToCSV(resultVector, iteration_no);
+					auto output = resultVector.GetAt(0);
+					PerIterResult = "Result: " + std::to_string(output);
+					int hash = 1;
+					unsigned long val = resultVector.GetAt(0);
+					unsigned long Int64AsInt = *(int*)(&val);
+					hash = 31 * hash + (int)(Int64AsInt ^ (Int64AsInt >> 32));
+					HashCode = hash;
+				}
+				break;
+				default:
+				{
+					std::cout << "BindingUtilities: output type not implemented.";
+				}
+				break;
+				}
+				std::cout << std::endl;
+			}
+			else if (desc.Kind() == LearningModelFeatureKind::Sequence)
+			{
+				auto seqDescriptor = desc.as<SequenceFeatureDescriptor>();
+				auto mapDescriptor = seqDescriptor.ElementDescriptor().as<MapFeatureDescriptor>();
+				auto keyKind = mapDescriptor.KeyKind();
+				auto valueKind = mapDescriptor.ValueDescriptor();
+				auto tensorKind = valueKind.as<TensorFeatureDescriptor>().TensorKind();
+				switch (keyKind)
+				{
+				case TensorKind::Int64:
+				{
+					OutputSequenceBinding<int64_t, float>(results, desc.Name());
+				}
+				break;
+				case TensorKind::Float:
+				{
+					OutputSequenceBinding<float, float>(results, desc.Name());
+				}
+				break;
+				}
+			}
+		}
+		return PerIterResult;
+	}
+
+
+	void PrintEvaluationResults(LearningModel model, CommandLineArgs args, IMapView<hstring, Windows::Foundation::IInspectable> results)
     {
         std::cout << "Outputting results.. " << std::endl;
         for (auto&& desc : model.OutputFeatures())
@@ -444,7 +568,7 @@ namespace BindingUtilities
                     auto resultVector = results.Lookup(desc.Name()).as<TensorFloat>().GetAsVectorView();
                     UINT maxIndex = 0;
                     auto maxValue = resultVector.GetAt(0);
-
+					
                     for (UINT i = 0; i < resultVector.Size(); i++)
                     {
                         if (maxValue < resultVector.GetAt(i))
@@ -462,7 +586,7 @@ namespace BindingUtilities
                     auto resultVector = results.Lookup(desc.Name()).as<TensorFloat16Bit>().GetAsVectorView();
                     UINT maxIndex = 0;
                     auto maxValue = resultVector.GetAt(0);
-
+					
                     for (UINT i = 0; i < resultVector.Size(); i++)
                     {
                         if (maxValue < resultVector.GetAt(i))
@@ -471,9 +595,8 @@ namespace BindingUtilities
                             maxIndex = i;
                         }
                     }
-
                     std::wcout << " resultVector[" << maxIndex << "] has the maximal value of " << maxValue << std::endl;
-                }
+	            }
                 break;
                 case TensorKind::Int64:
                 {

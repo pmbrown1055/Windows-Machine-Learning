@@ -21,6 +21,7 @@ void CommandLineArgs::PrintUsage() {
     std::cout << "  -scale <float> : scale factor for input image (float)" << std::endl;
     std::cout << "  -meanStdDev <float> <float> <float> : 3 factors for mean std dev adjustment to input image" << std::endl;
     std::cout << "  -debug : print trace logs" << std::endl;
+	std::cout << "  -save: saves per iteration values and output tensor results to csv files" << std::endl;
 }
 
 CommandLineArgs::CommandLineArgs()
@@ -79,6 +80,11 @@ CommandLineArgs::CommandLineArgs()
         {
             m_perfCapture = true;
         }
+		else if ((_wcsicmp(args[i], L"-save") == 0))
+		{
+			m_perIterCapture = true;
+		}
+
         else if ((_wcsicmp(args[i], L"-debug") == 0))
         {
             m_debug = true;
