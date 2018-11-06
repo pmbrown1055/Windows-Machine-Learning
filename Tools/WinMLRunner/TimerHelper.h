@@ -125,7 +125,7 @@ public:
     double GetDeltaPeakPageFileUsage() { return m_deltaPeakPagefileUsage; }
     double GetDeltaWorkingSetUsage() { return m_deltaWorkingSetSize; }
     double GetDeltaPeakWorkingSetUsage() { return m_deltaPeakWorkingSetSize; }
-	double GetStartWorkingSet() { return  (double)BYTE_TO_MB((double)m_startWorkingSetSize); }
+    double GetStartWorkingSet() { return  (double)BYTE_TO_MB((double)m_startWorkingSetSize); }
 
 private:
 
@@ -318,10 +318,10 @@ public:
         }
     }
 
-    double GetGpuUsage() const { return m_gpuUsage; }
-    double GetDedicatedMemory() const { return m_deltaGpuDedicatedMemory; }
-    double GetSharedMemory() const { return m_deltaGpuSharedMemory; }
-	double GetStartSharedMemory() { return  m_startGpuSharedMemory; }
+    double GetGpuUsage() { return m_gpuUsage; }
+    double GetDedicatedMemory() { return m_deltaGpuDedicatedMemory; }
+    double GetSharedMemory() { return m_deltaGpuSharedMemory; }
+    double GetStartSharedMemory() { return  m_startGpuSharedMemory; }
 
 private:
     // Pdh function prototypes
@@ -392,8 +392,8 @@ typedef enum CounterType
     GPU_USAGE,
     GPU_DEDICATED_MEM_USAGE,
     GPU_SHARED_MEM_USAGE,
-	STARTING_WORKING_SET,
-	STARTING_SHARED_MEM,
+    STARTING_WORKING_SET,
+    STARTING_SHARED_MEM,
     TYPE_COUNT
 } CounterType;
 
@@ -409,8 +409,8 @@ const static std::vector<std::wstring> CounterTypeName =
     L"GPU USAGE",
     L"GPU_DEDICATED_MEM_USAGE",
     L"GPU_SHARED_MEM_USAGE", 
-	L"STARTING_WORKING_SET",
-	L"STARTING_SHARED_MEM"
+    L"STARTING_WORKING_SET",
+    L"STARTING_SHARED_MEM"
 };
 
 class PerfCounterStatistics
@@ -445,13 +445,13 @@ public:
         {
             m_data[i].Reset();
         }
-		CpuWorkingDiff.clear();
-		CpuWorkingStart.clear();
-		GpuSharedDiff.clear();
-		GpuSharedStart.clear();
-		GpuDedicatedDiff.clear();
-		GpuTime.clear();
-		CpuTime.clear();
+        CpuWorkingDiff = 0;
+        CpuWorkingStart = 0;
+        GpuSharedDiff = 0;
+        GpuSharedStart = 0;
+        GpuDedicatedDiff = 0;
+        GpuTime = 0;
+        CpuTime = 0;
     }
 
     void Start()
@@ -488,13 +488,13 @@ public:
         counterValue[CounterType::PEAK_PAGE_FILE_USAGE] = m_cpuCounter.GetDeltaPeakPageFileUsage();
         counterValue[CounterType::WORKING_SET_USAGE] = m_cpuCounter.GetDeltaWorkingSetUsage();
         counterValue[CounterType::PEAK_WORKING_SET_USAGE] = m_cpuCounter.GetDeltaPeakWorkingSetUsage();
-		counterValue[CounterType::STARTING_WORKING_SET] = m_cpuCounter.GetStartWorkingSet();
+        counterValue[CounterType::STARTING_WORKING_SET] = m_cpuCounter.GetStartWorkingSet();
 
 #ifndef DISABLE_GPU_COUNTERS
         counterValue[CounterType::GPU_USAGE] = m_gpuCounter.GetGpuUsage();
         counterValue[CounterType::GPU_DEDICATED_MEM_USAGE] = m_gpuCounter.GetDedicatedMemory();
         counterValue[CounterType::GPU_SHARED_MEM_USAGE] = m_gpuCounter.GetSharedMemory();
-		counterValue[CounterType::STARTING_SHARED_MEM] = m_gpuCounter.GetStartSharedMemory();
+        counterValue[CounterType::STARTING_SHARED_MEM] = m_gpuCounter.GetStartSharedMemory();
 #endif
         // Update data blocks
         for (int i = 0; i < CounterType::TYPE_COUNT; ++i)
@@ -505,13 +505,15 @@ public:
             m_data[i].min = (counterValue[i] < m_data[i].min) ? counterValue[i] : m_data[i].min;
         }
 
-		CpuWorkingDiff.push_back(counterValue[CounterType::WORKING_SET_USAGE]);
-		CpuWorkingStart.push_back(counterValue[CounterType::STARTING_WORKING_SET]);
-		GpuSharedDiff.push_back(counterValue[CounterType::GPU_SHARED_MEM_USAGE]);
-		GpuSharedStart.push_back(counterValue[CounterType::STARTING_SHARED_MEM]);
-		GpuDedicatedDiff.push_back(counterValue[CounterType::GPU_DEDICATED_MEM_USAGE]);
-		GpuTime.push_back(counterValue[CounterType::TIMER]);
-		CpuTime.push_back(counterValue[CounterType::TIMER]);
+        CpuWorkingDiff = counterValue[CounterType::WORKING_SET_USAGE];
+        CpuWorkingStart = counterValue[CounterType::STARTING_WORKING_SET];
+        CpuTime = counterValue[CounterType::TIMER];
+
+        GpuSharedDiff = counterValue[CounterType::GPU_SHARED_MEM_USAGE];
+        GpuSharedStart = counterValue[CounterType::STARTING_SHARED_MEM];
+        GpuDedicatedDiff = counterValue[CounterType::GPU_DEDICATED_MEM_USAGE];
+        GpuTime = counterValue[CounterType::TIMER];
+
 
         // Update buffer index
         if (m_pos + 1 >= TIMER_SLOT_SIZE)
@@ -546,13 +548,13 @@ public:
         return var / count;
     }
 
-	std::vector<double> GetAllCpuWorkingDiff() { return CpuWorkingDiff; }
-	std::vector<double> GetAllGpuSharedDiff() { return GpuSharedDiff; }
-	std::vector<double> GetAllCpuWorkingStart() { return CpuWorkingStart; }
-	std::vector<double> GetAllGpuSharedStart() { return GpuSharedStart; }
-	std::vector<double> GetAllGpuDedicatedDiff() { return GpuDedicatedDiff; }
-	std::vector<double> GetAllGpuTime() { return GpuTime; }
-	std::vector<double> GetAllCpuTime() { return CpuTime; }
+    double GetCpuWorkingDiff() { return CpuWorkingDiff; }
+    double GetGpuSharedDiff() { return GpuSharedDiff; }
+    double GetCpuWorkingStart() { return CpuWorkingStart; }
+    double GetGpuSharedStart() { return GpuSharedStart; }
+    double GetGpuDedicatedDiff() { return GpuDedicatedDiff; }
+    double GetGpuTime() { return GpuTime; }
+    double GetCpuTime() { return CpuTime; }
 
 private:
     struct DataBlock
@@ -582,13 +584,13 @@ private:
 #endif
     DataBlock m_data[CounterType::TYPE_COUNT];
 
-	std::vector<double> CpuWorkingDiff;
-	std::vector<double> CpuWorkingStart;
-	std::vector<double> GpuSharedDiff;
-	std::vector<double> GpuSharedStart;
-	std::vector<double> GpuDedicatedDiff;
-	std::vector<double> GpuTime;
-	std::vector<double> CpuTime;
+    double CpuWorkingDiff;
+    double CpuWorkingStart;
+    double GpuSharedDiff;
+    double GpuSharedStart;
+    double GpuDedicatedDiff;
+    double GpuTime;
+    double CpuTime;
 };
 
 

@@ -13,13 +13,13 @@ public:
     Windows::AI::MachineLearning::LearningModelDeviceKind DeviceKind() const { return m_deviceKind; }
     bool PerfCapture() const { return m_perfCapture; }
     bool EnableDebugOutput() const { return m_debug;  }
-	bool PerIterCapture() const { return m_perIterCapture; }
+  bool PerIterCapture() const { return m_perIterCapture; }
    
     const std::wstring& ImagePath() const { return m_imagePath; }
     const std::wstring& CsvPath() const { return m_csvData; }
 
-	const float Scale() const { return m_scale; }
-	const std::array<float, 3>& MeanStdDev() const { return m_meanStdDev; }
+  const float Scale() const { return m_scale; }
+  const std::array<float, 3>& MeanStdDev() const { return m_meanStdDev; }
 
     const std::wstring& FolderPath() const { return m_modelFolderPath; }
     const std::wstring& ModelPath() const { return m_modelPath; }
@@ -33,15 +33,15 @@ private:
     bool m_useGPU = false;
     bool m_useCPUandGPU = false;
     bool m_debug = false;
-	bool m_perIterCapture = false;
+  bool m_perIterCapture = false;
     Windows::AI::MachineLearning::LearningModelDeviceKind m_deviceKind = Windows::AI::MachineLearning::LearningModelDeviceKind::DirectX;
 
     std::wstring m_modelFolderPath;
     std::wstring m_modelPath;
     std::wstring m_imagePath;
 
-	float m_scale;
-	std::array<float, 3> m_meanStdDev;
+  float m_scale;
+  std::array<float, 3> m_meanStdDev;
     
     std::wstring m_csvData;
     std::wstring m_inputData;
