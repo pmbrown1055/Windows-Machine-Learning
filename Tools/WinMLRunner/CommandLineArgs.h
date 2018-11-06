@@ -17,8 +17,8 @@ public:
     const std::wstring& ImagePath() const { return m_imagePath; }
     const std::wstring& CsvPath() const { return m_csvData; }
 
-	const float Scale() const { return m_scale; }
-	const std::array<float, 3>& MeanStdDev() const { return m_meanStdDev; }
+    const float Scale() const { return m_scale; }
+    const std::array<float, 3>& MeanStdDev() const { return m_meanStdDev; }
 
     const std::wstring& FolderPath() const { return m_modelFolderPath; }
     const std::wstring& ModelPath() const { return m_modelPath; }
@@ -38,8 +38,8 @@ private:
     std::wstring m_modelPath;
     std::wstring m_imagePath;
 
-	float m_scale;
-	std::array<float, 3> m_meanStdDev;
+    float m_scale;
+    std::array<float, 3> m_meanStdDev;
     
     std::wstring m_csvData;
     std::wstring m_inputData;

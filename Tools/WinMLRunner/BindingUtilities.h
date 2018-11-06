@@ -133,7 +133,7 @@ namespace BindingUtilities
         }
     }
     
-    SoftwareBitmap LoadImageFile(hstring filePath)
+    SoftwareBitmap LoadImageFile(hstring filePath, std::vector<int64_t> shape)
     {
         try
         {
@@ -143,8 +143,24 @@ namespace BindingUtilities
             auto stream = file.OpenAsync(FileAccessMode::Read).get();
             // Create the decoder from the stream
             BitmapDecoder decoder = BitmapDecoder::CreateAsync(stream).get();
+            // Create a transform object with default parameters (no transform)
+            auto transform = BitmapTransform();
+
+            // If input dimensions are different from tensor input, then scale / crop while reading
+            if (decoder.PixelHeight() != shape[2] ||
+                decoder.PixelWidth() != shape[3])
+            {
+                transform.ScaledHeight((uint32_t)shape[2]);
+                transform.ScaledWidth((uint32_t)shape[3]);
+                transform.InterpolationMode(BitmapInterpolationMode::Cubic);
+            }
+
             // get the bitmap
-            SoftwareBitmap softwareBitmap = decoder.GetSoftwareBitmapAsync().get();
+            SoftwareBitmap softwareBitmap = decoder.GetSoftwareBitmapAsync(BitmapPixelFormat::Bgra8,
+                                                                           BitmapAlphaMode::Premultiplied,
+                                                                           transform,
+                                                                           ExifOrientationMode::RespectExifOrientation,
+                                                                           ColorManagementMode::DoNotColorManage).get();
             // all done
             return softwareBitmap;
         }
@@ -327,67 +343,73 @@ namespace BindingUtilities
         {
             hstring name = description.Name();
             auto Kind = description.Kind();
-            auto softwareBitmap = LoadImageFile(imagePath.c_str());
-            if (softwareBitmap == nullptr)
-            {
-                std::cout << "BindingUtilities: Cannot bind image to LearningModelBinding." << std::endl;
-                std::cout << std::endl;
-                throw_hresult(E_FAIL);
-            }
+
             try
             {
-				if (scale != 1.0 &&
-					 ( mean_std_dev[0] != 0 ||
-					   mean_std_dev[1] != 0 ||
-					   mean_std_dev[2] != 0))
-				{
-					const auto imgHeight = softwareBitmap.PixelHeight();
-					const auto imgWidth = softwareBitmap.PixelWidth();
+                TensorFeatureDescriptor tensorDescriptor = description.as<TensorFeatureDescriptor>();
+                std::vector<int64_t> shape = ModelBinding<float>((description.as<TensorFeatureDescriptor>())).GetShapeBuffer();
 
-					Buffer sbBuffer(imgHeight * imgWidth * 4);
-					softwareBitmap.CopyToBuffer(sbBuffer);
-					byte *sbBufferData = sbBuffer.data();
+                auto softwareBitmap = LoadImageFile(imagePath.c_str(), shape);
+                if (softwareBitmap == nullptr)
+                {
+                    std::cout << "BindingUtilities: Cannot bind image to LearningModelBinding." << std::endl;
+                    std::cout << std::endl;
+                    throw_hresult(E_FAIL);
+                }
 
-					std::vector<float> resultArrList(imgHeight * imgWidth * 3);
+                if (scale != 1.0 &&
+                     ( mean_std_dev[0] != 0 ||
+                       mean_std_dev[1] != 0 ||
+                       mean_std_dev[2] != 0))
+                {
+                    const auto imgHeight = softwareBitmap.PixelHeight();
+                    const auto imgWidth = softwareBitmap.PixelWidth();
 
-					//Roll the array correctly for the tensor
-					for (int i = 0, count = 0; i < imgHeight * imgWidth; ++i, count += 4)
-					{
-						resultArrList[i] = (sbBufferData[count] - mean_std_dev[0]) / scale;
-						resultArrList[i + imgHeight * imgWidth] = (sbBufferData[count + 1] - mean_std_dev[1]) / scale;
-						resultArrList[i + imgHeight * imgWidth * 2] = (sbBufferData[count + 2] - mean_std_dev[2]) / scale;
-					}
+                    Buffer sbBuffer(imgHeight * imgWidth * 4);
+                    softwareBitmap.CopyToBuffer(sbBuffer);
+                    byte *sbBufferData = sbBuffer.data();
 
-					TensorFeatureDescriptor tensorDescriptor = description.as<TensorFeatureDescriptor>();
-					TensorKind tensorKind = tensorDescriptor.TensorKind();
-					switch (tensorKind)
-					{
-					case TensorKind::Float:
-					{
-						ModelBinding<float> binding(description);
-						auto floatTensor = TensorFloat::CreateFromArray(binding.GetShapeBuffer(), resultArrList);
-						context.Bind(name, floatTensor);
-					}
-					break;
-					case TensorKind::Float16:
-					{
-						ModelBinding<float> binding(description);
-						auto float16Tensor = TensorFloat16Bit::CreateFromArray(binding.GetShapeBuffer(), resultArrList);
-						context.Bind(name, float16Tensor);
-					}
-					break;
-					default:
-						std::cout << "BindingUtilities: Unknown TensorKind for binding." << std::endl;
-						std::cout << std::endl;
-						throw_hresult(E_FAIL);
-					}
-				}
-				else
-				{
-					auto videoFrame = VideoFrame::CreateWithSoftwareBitmap( softwareBitmap );
-					auto featureValue = ImageFeatureValue::CreateFromVideoFrame(videoFrame);
-					context.Bind(name, featureValue);
-				}
+                    std::vector<float> resultArrList(shape[2] * shape[3] * shape[1]);
+
+                    //Roll the array correctly for the tensor
+                    for (int i = 0, count = 0; i < imgHeight * imgWidth; ++i, count += 4)
+                    {
+                        resultArrList[i] = (sbBufferData[count] - mean_std_dev[0]) / scale;
+                        resultArrList[i + imgHeight * imgWidth] = (sbBufferData[count + 1] - mean_std_dev[1]) / scale;
+                        resultArrList[i + imgHeight * imgWidth * 2] = (sbBufferData[count + 2] - mean_std_dev[2]) / scale;
+                    }
+
+                    ITensorFloat *inputTensor = nullptr;
+                    TensorKind tensorKind = tensorDescriptor.TensorKind();
+
+                    switch (tensorKind)
+                    {
+                    case TensorKind::Float:
+                    {
+                        ModelBinding<float> binding(description);
+                        auto floatTensor = TensorFloat::CreateFromArray(binding.GetShapeBuffer(), resultArrList);
+                        context.Bind(name, floatTensor);
+                    }
+                    break;
+                    case TensorKind::Float16:
+                    {
+                        ModelBinding<float> binding(description);
+                        auto float16Tensor = TensorFloat16Bit::CreateFromArray(binding.GetShapeBuffer(), resultArrList);
+                        context.Bind(name, float16Tensor);
+                    }
+                    break;
+                    default:
+                        std::cout << "BindingUtilities: Unknown TensorKind for binding." << std::endl;
+                        std::cout << std::endl;
+                        throw_hresult(E_FAIL);
+                    }
+                }
+                else
+                {
+                    auto videoFrame = VideoFrame::CreateWithSoftwareBitmap( softwareBitmap );
+                    auto featureValue = ImageFeatureValue::CreateFromVideoFrame(videoFrame);
+                    context.Bind(name, featureValue);
+                }
             }
             catch (hresult_error hr)
             {
