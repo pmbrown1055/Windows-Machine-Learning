@@ -10,7 +10,6 @@ Profiler<WINML_MODEL_TEST_PERF> g_Profiler;
 // Binds and evaluates the user-specified model and outputs success/failure for each step. If the
 // perf flag is used, it will output the CPU, GPU, and wall-clock time for each step to the
 // command-line and to a CSV file.
-
 HRESULT EvaluateModel(LearningModel model, const CommandLineArgs& args, OutputHelper* output, LearningModelDeviceKind deviceKind)
 {
     if (model == nullptr)
@@ -90,30 +89,17 @@ HRESULT EvaluateModel(LearningModel model, const CommandLineArgs& args, OutputHe
             return hr.code();
         }
     }
-    if (args.PerfCapture() || args.PerIterCapture())
+    if (args.PerfCapture())
     {
         WINML_PROFILING_STOP(g_Profiler, WINML_MODEL_TEST_PERF::BIND_VALUE);
         output->m_clockBindTime = timer.Stop();
-
-        if (args.PerIterCapture())
-        {
-            if (deviceKind == LearningModelDeviceKind::Cpu)
-                output->SaveBindTimesCPU(g_Profiler);
-            else
-                output->SaveBindTimesGPU(g_Profiler);
-        }
     }
     std::cout << "[SUCCESS]" << std::endl;
 
     std::cout << "Evaluating Model on " << device << "...";
     LearningModelEvaluationResult result = nullptr;
-    if(args.PerfCapture() || args.PerIterCapture())
+    if(args.PerfCapture())
     {
-        int Hash = 1;
-        std::vector<int> HashRes;
-        std::vector<std::string> IterResult;
-        std::string Res;
-        
         for (UINT i = 0; i < args.NumIterations(); i++)
         {
             WINML_PROFILING_START(g_Profiler, WINML_MODEL_TEST_PERF::EVAL_MODEL);
@@ -128,42 +114,20 @@ HRESULT EvaluateModel(LearningModel model, const CommandLineArgs& args, OutputHe
                 std::wcout << hr.message().c_str() << std::endl;
                 return hr.code();
             }
-
             WINML_PROFILING_STOP(g_Profiler, WINML_MODEL_TEST_PERF::EVAL_MODEL);
             output->m_clockEvalTimes.push_back(timer.Stop());
-            if (args.PerIterCapture())
-            {
-                if (deviceKind == LearningModelDeviceKind::Cpu)
-                    output->SaveCPUTimes(g_Profiler, i);
-                else
-                    output->SaveGPUTimes(g_Profiler, i);
-            }
-
-            if (useInputData && args.PerIterCapture())
-            {
-                Res = BindingUtilities::SaveEvaluationResults(model, args, result.Outputs(), output, i+1, Hash);
-                IterResult.push_back(Res);
-                HashRes.push_back(Hash);
-            }
         }
 
         output->PrintWallClockTimes(args.NumIterations());
-        if (args.PerfCapture())
+        if (deviceKind == LearningModelDeviceKind::Cpu)
         {
-            if (deviceKind == LearningModelDeviceKind::Cpu)
-            {
-                output->PrintCPUTimes(g_Profiler, args.NumIterations());
-            }
-            else {
-                output->PrintGPUTimes(g_Profiler, args.NumIterations());
-            }
+            output->PrintCPUTimes(g_Profiler, args.NumIterations());
         }
-
-        if (args.PerIterCapture())
-            output->SaveResult(IterResult, HashRes);
+        else {
+            output->PrintGPUTimes(g_Profiler, args.NumIterations());
+        }
         g_Profiler.Reset();
     }
-
     else
     {
         try
@@ -195,7 +159,7 @@ LearningModel LoadModelHelper(const CommandLineArgs& args, OutputHelper * output
 
     try
     {
-        if (args.PerfCapture() || args.PerIterCapture())
+        if (args.PerfCapture())
         {
             WINML_PROFILING_START(g_Profiler, WINML_MODEL_TEST_PERF::LOAD_MODEL);
             timer.Start();
@@ -208,14 +172,10 @@ LearningModel LoadModelHelper(const CommandLineArgs& args, OutputHelper * output
         std::wcout << hr.message().c_str() << std::endl;
         throw;
     }
-    if (args.PerfCapture() || args.PerIterCapture())
+    if (args.PerfCapture())
     {
         WINML_PROFILING_STOP(g_Profiler, WINML_MODEL_TEST_PERF::LOAD_MODEL);
         output->m_clockLoadTime = timer.Stop();
-        if (args.PerIterCapture())
-        {
-                output->SaveLoadTimes(g_Profiler);
-        }
     }
     output->PrintModelInfo(args.ModelPath(), model);
     std::cout << "Loading model...[SUCCESS]" << std::endl;
@@ -261,21 +221,6 @@ HRESULT EvaluateModelsInDirectory(CommandLineArgs& args, OutputHelper * output)
                     return evalHResult;
                 }
             }
-        
-            std::string ImgName;
-            if (!args.ImagePath().empty()) {
-                std::wstring img = args.ImagePath();
-                std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-                ImgName = converter.to_bytes(img);
-            }
-
-            else {
-                ImgName = "No Input Image \n";
-            }
-            if (args.PerIterCapture()) {
-                output->WritePerformanceDataToCSVPerIteration(g_Profiler, args, fileName, ImgName);
-            }
-
             output->WritePerformanceDataToCSV(g_Profiler, args, fileName);
             output->Reset();
         }
@@ -286,22 +231,15 @@ HRESULT EvaluateModelsInDirectory(CommandLineArgs& args, OutputHelper * output)
 int main(int argc, char** argv)
 {
     CommandLineArgs args;
-    OutputHelper output(args.NumIterations());
-    
+    OutputHelper output;
+
     // Initialize COM in a multi-threaded environment.
     winrt::init_apartment();
 
     // Profiler is a wrapper class that captures and stores timing and memory usage data on the
     // CPU and GPU.
     g_Profiler.Enable();
-
     output.SetDefaultCSVFileName();
-
-    if (args.PerIterCapture()) {
-        output.SetDefaultFolder();
-        output.SetDefaultCSVFileNamePerIteration();
-        output.SetDefaultCSVResult();
-    }
 
     if (!args.ModelPath().empty())
     {
@@ -331,21 +269,6 @@ int main(int argc, char** argv)
             {
                 return evalHResult;
             }
-        }
-
-        std::string ImgName;
-        if (!args.ImagePath().empty()) {
-            std::wstring img = args.ImagePath();
-            std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-            ImgName = converter.to_bytes(img);
-        }
-
-        else {
-            ImgName = "No Input Image \n";
-        }
-
-        if (args.PerIterCapture()) {
-            output.WritePerformanceDataToCSVPerIteration(g_Profiler, args, args.ModelPath(), ImgName);
         }
         output.WritePerformanceDataToCSV(g_Profiler, args, args.ModelPath());
         output.Reset();

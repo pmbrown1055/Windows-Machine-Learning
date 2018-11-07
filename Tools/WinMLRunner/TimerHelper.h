@@ -125,7 +125,6 @@ public:
     double GetDeltaPeakPageFileUsage() { return m_deltaPeakPagefileUsage; }
     double GetDeltaWorkingSetUsage() { return m_deltaWorkingSetSize; }
     double GetDeltaPeakWorkingSetUsage() { return m_deltaPeakWorkingSetSize; }
-    double GetStartWorkingSet() { return  (double)BYTE_TO_MB((double)m_startWorkingSetSize); }
 
 private:
 
@@ -318,10 +317,9 @@ public:
         }
     }
 
-    double GetGpuUsage() { return m_gpuUsage; }
-    double GetDedicatedMemory() { return m_deltaGpuDedicatedMemory; }
-    double GetSharedMemory() { return m_deltaGpuSharedMemory; }
-    double GetStartSharedMemory() { return  m_startGpuSharedMemory; }
+    double GetGpuUsage() const { return m_gpuUsage; }
+    double GetDedicatedMemory() const { return m_deltaGpuDedicatedMemory; }
+    double GetSharedMemory() const { return m_deltaGpuSharedMemory; }
 
 private:
     // Pdh function prototypes
@@ -392,8 +390,6 @@ typedef enum CounterType
     GPU_USAGE,
     GPU_DEDICATED_MEM_USAGE,
     GPU_SHARED_MEM_USAGE,
-    STARTING_WORKING_SET,
-    STARTING_SHARED_MEM,
     TYPE_COUNT
 } CounterType;
 
@@ -408,9 +404,7 @@ const static std::vector<std::wstring> CounterTypeName =
     L"PEAK WORK SET USAGE",
     L"GPU USAGE",
     L"GPU_DEDICATED_MEM_USAGE",
-    L"GPU_SHARED_MEM_USAGE", 
-    L"STARTING_WORKING_SET",
-    L"STARTING_SHARED_MEM"
+    L"GPU_SHARED_MEM_USAGE"
 };
 
 class PerfCounterStatistics
@@ -445,13 +439,6 @@ public:
         {
             m_data[i].Reset();
         }
-        CpuWorkingDiff = 0;
-        CpuWorkingStart = 0;
-        GpuSharedDiff = 0;
-        GpuSharedStart = 0;
-        GpuDedicatedDiff = 0;
-        GpuTime = 0;
-        CpuTime = 0;
     }
 
     void Start()
@@ -488,13 +475,10 @@ public:
         counterValue[CounterType::PEAK_PAGE_FILE_USAGE] = m_cpuCounter.GetDeltaPeakPageFileUsage();
         counterValue[CounterType::WORKING_SET_USAGE] = m_cpuCounter.GetDeltaWorkingSetUsage();
         counterValue[CounterType::PEAK_WORKING_SET_USAGE] = m_cpuCounter.GetDeltaPeakWorkingSetUsage();
-        counterValue[CounterType::STARTING_WORKING_SET] = m_cpuCounter.GetStartWorkingSet();
-
 #ifndef DISABLE_GPU_COUNTERS
         counterValue[CounterType::GPU_USAGE] = m_gpuCounter.GetGpuUsage();
         counterValue[CounterType::GPU_DEDICATED_MEM_USAGE] = m_gpuCounter.GetDedicatedMemory();
         counterValue[CounterType::GPU_SHARED_MEM_USAGE] = m_gpuCounter.GetSharedMemory();
-        counterValue[CounterType::STARTING_SHARED_MEM] = m_gpuCounter.GetStartSharedMemory();
 #endif
         // Update data blocks
         for (int i = 0; i < CounterType::TYPE_COUNT; ++i)
@@ -504,16 +488,6 @@ public:
             m_data[i].max = (counterValue[i] > m_data[i].max) ? counterValue[i] : m_data[i].max;
             m_data[i].min = (counterValue[i] < m_data[i].min) ? counterValue[i] : m_data[i].min;
         }
-
-        CpuWorkingDiff = counterValue[CounterType::WORKING_SET_USAGE];
-        CpuWorkingStart = counterValue[CounterType::STARTING_WORKING_SET];
-        CpuTime = counterValue[CounterType::TIMER];
-
-        GpuSharedDiff = counterValue[CounterType::GPU_SHARED_MEM_USAGE];
-        GpuSharedStart = counterValue[CounterType::STARTING_SHARED_MEM];
-        GpuDedicatedDiff = counterValue[CounterType::GPU_DEDICATED_MEM_USAGE];
-        GpuTime = counterValue[CounterType::TIMER];
-
 
         // Update buffer index
         if (m_pos + 1 >= TIMER_SLOT_SIZE)
@@ -548,14 +522,6 @@ public:
         return var / count;
     }
 
-    double GetCpuWorkingDiff() { return CpuWorkingDiff; }
-    double GetGpuSharedDiff() { return GpuSharedDiff; }
-    double GetCpuWorkingStart() { return CpuWorkingStart; }
-    double GetGpuSharedStart() { return GpuSharedStart; }
-    double GetGpuDedicatedDiff() { return GpuDedicatedDiff; }
-    double GetGpuTime() { return GpuTime; }
-    double GetCpuTime() { return CpuTime; }
-
 private:
     struct DataBlock
     {
@@ -583,14 +549,6 @@ private:
     GpuPerfCounter m_gpuCounter;
 #endif
     DataBlock m_data[CounterType::TYPE_COUNT];
-
-    double CpuWorkingDiff;
-    double CpuWorkingStart;
-    double GpuSharedDiff;
-    double GpuSharedStart;
-    double GpuDedicatedDiff;
-    double GpuTime;
-    double CpuTime;
 };
 
 
