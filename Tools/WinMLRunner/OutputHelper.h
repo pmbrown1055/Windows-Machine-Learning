@@ -69,8 +69,8 @@ public:
         std::cout << "  Working Set Memory usage (evaluate): " << m_CPUEvalMemoryUsage << " MB" << std::endl;
         std::cout << "  Dedicated memory usage (evaluate): " << m_GPUEvalDedicatedMemoryUsage << " MB" << std::endl;
         std::cout << "  Shared memory usage (evaluate): " << m_GPUEvalSharedMemoryUsage << " MB" << std::endl;
-        std::cout << std::endl;
-        std::cout << "  Throughput (FPS): " << 1000.0 / m_GPUEvalTime << std::endl;
+		std::cout << std::endl;
+		std::cout << "  Throughput (FPS): " << 1000.0 / m_GPUEvalTime << std::endl;
         std::cout << std::endl;
     }
 
