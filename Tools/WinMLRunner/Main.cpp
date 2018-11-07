@@ -4,251 +4,27 @@
 #include "BindingUtilities.h"
 #include "CommandLineArgs.h"
 #include <filesystem>
-#include <d3d11.h>
-#include <Windows.Graphics.DirectX.Direct3D11.interop.h>
 
 Profiler<WINML_MODEL_TEST_PERF> g_Profiler;
-
-using namespace winrt::Windows::Graphics::DirectX::Direct3D11;
-
-LearningModel LoadModel(const std::wstring path, bool capturePerf, bool silent, OutputHelper& output)
-{
-    Timer timer;
-    LearningModel model = nullptr;
-    output.PrintLoadingInfo(path);
-
-    try
-    {
-        if (capturePerf)
-        {
-            WINML_PROFILING_START(g_Profiler, WINML_MODEL_TEST_PERF::LOAD_MODEL);
-            timer.Start();
-        }
-        model = LearningModel::LoadFromFilePath(path);
-
-        if (capturePerf)
-        {
-            WINML_PROFILING_STOP(g_Profiler, WINML_MODEL_TEST_PERF::LOAD_MODEL);
-            output.m_clockLoadTime = timer.Stop();
-        }
-    }
-    catch (hresult_error hr)
-    {
-        std::wcout << "Load Model: " << path << " [FAILED]" << std::endl;
-        std::wcout << hr.message().c_str() << std::endl;
-        throw;
-    }
-
-    output.PrintModelInfo(path, model);
-
-    return model;
-}
-
-std::vector<std::wstring> GetModelsInDirectory(CommandLineArgs& args, OutputHelper* output)
-{
-    std::vector<std::wstring> modelPaths;
-
-    std::wstring folderPath = args.FolderPath();
-    for (auto & it : std::filesystem::directory_iterator(args.FolderPath()))
-    {
-        std::string path = it.path().string();
-
-        if (it.path().string().find(".onnx") != std::string::npos ||
-            it.path().string().find(".pb") != std::string::npos)
-        {
-            std::wstring fileName;
-            fileName.assign(path.begin(), path.end());
-            args.SetModelPath(fileName);
-            modelPaths.push_back(fileName);
-        }
-    }
-
-    return modelPaths;
-}
-
-std::vector<ILearningModelFeatureValue> GenerateInputFeatures(
-    const LearningModel& model,
-    const CommandLineArgs& args,
-    InputBindingType inputBindingType,
-    InputDataType inputDataType,
-    const IDirect3DDevice winrtDevice)
-{
-    std::vector<ILearningModelFeatureValue> inputFeatures;
-
-    for (uint32_t i = 0; i < model.InputFeatures().Size(); i++)
-    {
-        auto&& description = model.InputFeatures().GetAt(i);
-
-        if (inputDataType == InputDataType::Tensor || i > 0)
-        {
-            // For now, only the first input can be bound with real data
-            std::wstring csvPath = i == 0 ? args.CsvPath() : std::wstring();
-            auto tensorFeature = BindingUtilities::CreateBindableTensor(description, csvPath);
-            inputFeatures.push_back(tensorFeature);
-        }
-        else
-        {
-            auto imageFeature = BindingUtilities::CreateBindableImage(description, args.ImagePath(), inputBindingType, inputDataType, winrtDevice);
-            inputFeatures.push_back(imageFeature);
-        }
-    }
-
-    return inputFeatures;
-}
-
-HRESULT BindInputFeatures(const LearningModel& model, const LearningModelBinding& context, const std::vector<ILearningModelFeatureValue>& inputFeatures, const CommandLineArgs& args, OutputHelper& output, bool capturePerf)
-{
-    assert(model.InputFeatures().Size() == inputFeatures.size());
-
-    try
-    {
-        context.Clear();
-
-        Timer timer;
-
-        if (capturePerf)
-        {
-            timer.Start();
-            WINML_PROFILING_START(g_Profiler, WINML_MODEL_TEST_PERF::BIND_VALUE);
-        }
-
-        for (uint32_t i = 0; i < model.InputFeatures().Size(); i++)
-        {
-            auto&& description = model.InputFeatures().GetAt(i);
-            context.Bind(description.Name(), inputFeatures[i]);
-        }
-
-        if (capturePerf)
-        {
-            WINML_PROFILING_STOP(g_Profiler, WINML_MODEL_TEST_PERF::BIND_VALUE);
-            output.m_clockBindTimes.push_back(timer.Stop());
-        }
-
-        if (!args.Silent())
-        {
-            std::cout << "[SUCCESS]" << std::endl;
-        }
-    }
-    catch (hresult_error hr)
-    {
-        std::cout << "[FAILED] Could Not Bind Input To Context" << std::endl;
-        std::wcout << hr.message().c_str() << std::endl;
-        return hr.code();
-    }
-
-    return S_OK;
-}
-
-HRESULT EvaluateModel(
-    const LearningModel& model,
-    const LearningModelBinding& context,
-    LearningModelSession& session,
-    bool isGarbageData,
-    const CommandLineArgs& args,
-    OutputHelper& output,
-    bool capturePerf
-)
-{
-    LearningModelEvaluationResult result = nullptr;
-
-    try
-    {
-        // Timer measures wall-clock time between the last two start/stop calls.
-        Timer timer;
-
-        if (capturePerf)
-        {
-            timer.Start();
-            WINML_PROFILING_START(g_Profiler, WINML_MODEL_TEST_PERF::EVAL_MODEL);
-        }
-
-        result = session.Evaluate(context, L"");
-
-        if (capturePerf)
-        {
-            WINML_PROFILING_STOP(g_Profiler, WINML_MODEL_TEST_PERF::EVAL_MODEL);
-            output.m_clockEvalTimes.push_back(timer.Stop());
-        }
-    }
-    catch (winrt::hresult_error hr)
-    {
-        std::cout << "[FAILED]" << std::endl;
-        std::wcout << hr.message().c_str() << std::endl;
-        return hr.code();
-    }
-
-    if (!args.Silent())
-    {
-        std::cout << "[SUCCESS]" << std::endl;
-    }
-
-    if (!isGarbageData && !args.Silent())
-    {
-        BindingUtilities::PrintEvaluationResults(model, args, result.Outputs());
-    }
-
-    return S_OK;
-}
 
 // Binds and evaluates the user-specified model and outputs success/failure for each step. If the
 // perf flag is used, it will output the CPU, GPU, and wall-clock time for each step to the
 // command-line and to a CSV file.
-HRESULT EvaluateModel(
-    const LearningModel& model,
-    const CommandLineArgs& args,
-    OutputHelper& output,
-    DeviceType deviceType,
-    InputBindingType inputBindingType,
-    InputDataType inputDataType,
-    DeviceCreationLocation deviceCreationLocation
-)
+
+HRESULT EvaluateModel(LearningModel model, const CommandLineArgs& args, OutputHelper* output, LearningModelDeviceKind deviceKind)
 {
     if (model == nullptr)
     {
         return hresult_invalid_argument().code();
     }
-
     LearningModelSession session = nullptr;
-    IDirect3DDevice winrtDevice = nullptr;
+
+    // Timer measures wall-clock time between the last two start/stop calls.
+    Timer timer;
 
     try
     {
-        if (deviceCreationLocation == DeviceCreationLocation::ClientCode)
-        {
-            // Creating the device on the client and using it to create the video frame and initialize the session makes sure that everything is on
-            // the same device. This usually avoids an expensive cross-device and cross-videoframe copy via the VideoFrame pipeline.
-            com_ptr<ID3D11Device> d3d11Device;
-            HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0, D3D11_SDK_VERSION, d3d11Device.put(), nullptr, nullptr);
-
-            if (FAILED(hr))
-            {
-                throw hresult(hr);
-            }
-
-            com_ptr<IDXGIDevice> dxgiDevice;
-            hr = d3d11Device->QueryInterface(IID_PPV_ARGS(dxgiDevice.put()));
-
-            if (FAILED(hr))
-            {
-                throw hresult(hr);
-            }
-
-            com_ptr<IInspectable> inspectableDevice;
-            hr = CreateDirect3D11DeviceFromDXGIDevice(dxgiDevice.get(), inspectableDevice.put());
-
-            if (FAILED(hr))
-            {
-                throw hresult(hr);
-            }
-
-            winrtDevice = inspectableDevice.as<IDirect3DDevice>();
-            LearningModelDevice learningModelDevice = LearningModelDevice::CreateFromDirect3D11Device(winrtDevice);
-            session = LearningModelSession(model, learningModelDevice);
-        }
-        else
-        {
-            session = LearningModelSession(model, TypeHelper::GetWinmlDeviceKind(deviceType));
-        }
+        session =  LearningModelSession(model, LearningModelDevice(deviceKind));
     }
     catch (hresult_error hr)
     {
@@ -263,249 +39,321 @@ HRESULT EvaluateModel(
         session.EvaluationProperties().Insert(L"EnableDebugOutput", nullptr);
     }
 
-    LearningModelBinding context(session);
+    LearningModelBinding binding(session);
 
     bool useInputData = false;
-    
-    // Add one more iteration if we ignore the first run
-    uint32_t numIterations = args.NumIterations() + args.IgnoreFirstRun();
-
-    bool isGarbageData = !args.CsvPath().empty() || !args.ImagePath().empty();
-
-    // Run the binding + evaluate multiple times and average the results
-    for (uint32_t i = 0; i < numIterations; i++)
+    std::string device = deviceKind == LearningModelDeviceKind::Cpu ? "CPU" : "GPU";
+    std::cout << "Binding Model on " << device << "...";
+    if (args.PerfCapture())
     {
-        bool captureIterationPerf = args.PerfCapture() && (!args.IgnoreFirstRun() || i > 0);
-
-        output.PrintBindingInfo(i + 1, deviceType, inputBindingType, inputDataType, deviceCreationLocation);
-
-        std::vector<ILearningModelFeatureValue> inputFeatures = GenerateInputFeatures(model, args, inputBindingType, inputDataType, winrtDevice);
-        HRESULT bindInputResult = BindInputFeatures(model, context, inputFeatures, args, output, captureIterationPerf);
-
-        if (FAILED(bindInputResult))
+        WINML_PROFILING_START(g_Profiler, WINML_MODEL_TEST_PERF::BIND_VALUE);
+        timer.Start();
+    }
+    if (!args.ImagePath().empty())
+    {
+        useInputData = true;
+        try
         {
-            return bindInputResult;
+            BindingUtilities::BindImageToContext(binding, model, args.ImagePath(), args.Scale(), args.MeanStdDev());
         }
-
-        output.PrintEvaluatingInfo(i + 1, deviceType, inputBindingType, inputDataType, deviceCreationLocation);
-
-        HRESULT evalResult = EvaluateModel(model, context, session, isGarbageData, args, output, captureIterationPerf);
-
-        if (FAILED(evalResult))
+        catch (hresult_error hr)
         {
-            return evalResult;
+            std::cout << "[FAILED] Could Not Bind Image To Context" << std::endl;
+            std::wcout << hr.message().c_str() << std::endl;
+            return hr.code();
         }
     }
+    else if (!args.CsvPath().empty())
+    {
+        useInputData = true;
+        try
+        {
+            BindingUtilities::BindCSVDataToContext(binding, model, args.CsvPath());
+        }
+        catch (hresult_error hr)
+        {
+            std::cout << "[FAILED] Could Not Bind CSV Data To Context" << std::endl;
+            std::wcout << hr.message().c_str() << std::endl;
+            return hr.code();
+        }
+    }
+    else
+    {
+        try
+        {
+            BindingUtilities::BindGarbageDataToContext(binding, model);
+        }
+        catch (hresult_error hr)
+        {
+            std::cout << "[FAILED] Could Not Garbage Data Context" << std::endl;
+            std::wcout << hr.message().c_str() << std::endl;
+            return hr.code();
+        }
+    }
+    if (args.PerfCapture() || args.PerIterCapture())
+    {
+        WINML_PROFILING_STOP(g_Profiler, WINML_MODEL_TEST_PERF::BIND_VALUE);
+        output->m_clockBindTime = timer.Stop();
 
-    session.Close();
+        if (args.PerIterCapture())
+        {
+            if (deviceKind == LearningModelDeviceKind::Cpu)
+                output->SaveBindTimesCPU(g_Profiler);
+            else
+                output->SaveBindTimesGPU(g_Profiler);
+        }
+    }
+    std::cout << "[SUCCESS]" << std::endl;
 
+    std::cout << "Evaluating Model on " << device << "...";
+    LearningModelEvaluationResult result = nullptr;
+    if(args.PerfCapture() || args.PerIterCapture())
+    {
+        int Hash = 1;
+        std::vector<int> HashRes;
+        std::vector<std::string> IterResult;
+        std::string Res;
+        
+        for (UINT i = 0; i < args.NumIterations(); i++)
+        {
+            WINML_PROFILING_START(g_Profiler, WINML_MODEL_TEST_PERF::EVAL_MODEL);
+            timer.Start();
+            try
+            {
+                result = session.Evaluate(binding, L"");
+            }
+            catch (hresult_error hr)
+            {
+                std::cout << "[FAILED]" << std::endl;
+                std::wcout << hr.message().c_str() << std::endl;
+                return hr.code();
+            }
+
+            WINML_PROFILING_STOP(g_Profiler, WINML_MODEL_TEST_PERF::EVAL_MODEL);
+            output->m_clockEvalTimes.push_back(timer.Stop());
+            if (args.PerIterCapture())
+            {
+                if (deviceKind == LearningModelDeviceKind::Cpu)
+                    output->SaveCPUTimes(g_Profiler, i);
+                else
+                    output->SaveGPUTimes(g_Profiler, i);
+            }
+
+            if (useInputData && args.PerIterCapture())
+            {
+                Res = BindingUtilities::SaveEvaluationResults(model, args, result.Outputs(), output, i+1, Hash);
+                IterResult.push_back(Res);
+                HashRes.push_back(Hash);
+            }
+        }
+
+        output->PrintWallClockTimes(args.NumIterations());
+        if (args.PerfCapture())
+        {
+            if (deviceKind == LearningModelDeviceKind::Cpu)
+            {
+                output->PrintCPUTimes(g_Profiler, args.NumIterations());
+            }
+            else {
+                output->PrintGPUTimes(g_Profiler, args.NumIterations());
+            }
+        }
+
+        if (args.PerIterCapture())
+            output->SaveResult(IterResult, HashRes);
+        g_Profiler.Reset();
+    }
+
+    else
+    {
+        try
+        {
+            result = session.Evaluate(binding, L"");
+        }
+        catch (hresult_error hr)
+        {
+            std::cout << "[FAILED]" << std::endl;
+            std::wcout << hr.message().c_str() << std::endl;
+            return hr.code();
+        }
+        std::cout << "[SUCCESS]" << std::endl;
+    }
+
+    std::cout << std::endl;
+
+    if (useInputData)
+    {
+       BindingUtilities::PrintEvaluationResults(model, args, result.Outputs());
+    }
     return S_OK;
 }
 
-HRESULT EvaluateModels(
-    std::vector<std::wstring>& modelPaths,
-    const std::vector<DeviceType>& deviceTypes,
-    const std::vector<InputBindingType>& inputBindingTypes,
-    const std::vector<InputDataType>& inputDataTypes,
-    const std::vector<DeviceCreationLocation> deviceCreationLocations,
-    const CommandLineArgs& args,
-    OutputHelper& output
-)
+LearningModel LoadModelHelper(const CommandLineArgs& args, OutputHelper * output)
 {
-    output.PrintHardwareInfo();
+    Timer timer;
+    LearningModel model = nullptr;
 
-    for (std::wstring& path : modelPaths)
+    try
     {
-        LearningModel model = nullptr;
+        if (args.PerfCapture() || args.PerIterCapture())
+        {
+            WINML_PROFILING_START(g_Profiler, WINML_MODEL_TEST_PERF::LOAD_MODEL);
+            timer.Start();
+        }
+        model = LearningModel::LoadFromFilePath(args.ModelPath());
+    }
+    catch (hresult_error hr)
+    {
+        std::wcout << "Load Model: " << args.ModelPath() << " [FAILED]" << std::endl;
+        std::wcout << hr.message().c_str() << std::endl;
+        throw;
+    }
+    if (args.PerfCapture() || args.PerIterCapture())
+    {
+        WINML_PROFILING_STOP(g_Profiler, WINML_MODEL_TEST_PERF::LOAD_MODEL);
+        output->m_clockLoadTime = timer.Stop();
+        if (args.PerIterCapture())
+        {
+                output->SaveLoadTimes(g_Profiler);
+        }
+    }
+    output->PrintModelInfo(args.ModelPath(), model);
+    std::cout << "Loading model...[SUCCESS]" << std::endl;
 
+    return model;
+}
+
+HRESULT EvaluateModelsInDirectory(CommandLineArgs& args, OutputHelper * output)
+{
+    std::wstring folderPath = args.FolderPath();
+    for (auto & it : std::filesystem::directory_iterator(args.FolderPath()))
+    {
+        std::string path = it.path().string();
+        if (it.path().string().find(".onnx") != std::string::npos ||
+            it.path().string().find(".pb") != std::string::npos)
+        {
+            std::wstring fileName;
+            fileName.assign(path.begin(), path.end());
+            args.SetModelPath(fileName);
+            LearningModel model = nullptr;
+            try
+            {
+                model = LoadModelHelper(args, output);
+            }
+            catch (hresult_error hr)
+            {
+                std::cout << hr.message().c_str() << std::endl;
+                return hr.code();
+            }
+            if (args.UseCPUandGPU() || args.UseCPU())
+            {
+                HRESULT evalHResult = EvaluateModel(model, args, output, LearningModelDeviceKind::Cpu);
+                if (evalHResult != S_OK)
+                {
+                    return evalHResult;
+                }
+            }
+            if (args.UseCPUandGPU() || args.UseGPU())
+            {
+                HRESULT evalHResult = EvaluateModel(model, args, output, args.DeviceKind());
+                if (evalHResult != S_OK)
+                {
+                    return evalHResult;
+                }
+            }
+        
+            std::string ImgName;
+            if (!args.ImagePath().empty()) {
+                std::wstring img = args.ImagePath();
+                std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+                ImgName = converter.to_bytes(img);
+            }
+
+            else {
+                ImgName = "No Input Image \n";
+            }
+            if (args.PerIterCapture()) {
+                output->WritePerformanceDataToCSVPerIteration(g_Profiler, args, fileName, ImgName);
+            }
+
+            output->WritePerformanceDataToCSV(g_Profiler, args, fileName);
+            output->Reset();
+        }
+    }
+    return S_OK;
+}
+
+int main(int argc, char** argv)
+{
+    CommandLineArgs args;
+    OutputHelper output(args.NumIterations());
+    
+    // Initialize COM in a multi-threaded environment.
+    winrt::init_apartment();
+
+    // Profiler is a wrapper class that captures and stores timing and memory usage data on the
+    // CPU and GPU.
+    g_Profiler.Enable();
+
+    output.SetDefaultCSVFileName();
+
+    if (args.PerIterCapture()) {
+        output.SetDefaultFolder();
+        output.SetDefaultCSVFileNamePerIteration();
+        output.SetDefaultCSVResult();
+    }
+
+    if (!args.ModelPath().empty())
+    {
+        output.PrintHardwareInfo();
+        LearningModel model = nullptr;
         try
         {
-            model = LoadModel(path, args.PerfCapture(), args.Silent(), output);
+            model = LoadModelHelper(args, &output);
         }
         catch (hresult_error hr)
         {
             std::cout << hr.message().c_str() << std::endl;
             return hr.code();
         }
-
-        auto firstFeature = model.InputFeatures().First().Current();
-        auto tensorDescriptor = firstFeature.try_as<TensorFeatureDescriptor>();
-
-        // Map and Sequence bindings are not supported yet
-        if (!tensorDescriptor)
+        if (args.UseCPUandGPU() || args.UseCPU())
         {
-            continue;
-        }
-
-        for (auto deviceType : deviceTypes)
-        {
-            for (auto inputBindingType : inputBindingTypes)
+            HRESULT evalHResult = EvaluateModel(model, args, &output, LearningModelDeviceKind::Cpu);
+            if (FAILED(evalHResult))
             {
-                for (auto inputDataType : inputDataTypes)
-                {
-                    for (auto deviceCreationLocation : deviceCreationLocations)
-                    {
-                        if (args.PerfCapture())
-                        {
-                            output.ResetBindAndEvalTImes();
-                            g_Profiler.Reset();
-                        }
-
-                        if (inputDataType != InputDataType::Tensor)
-                        {
-                            // Currently GPU binding only work with 4D tensors and RGBA/BGRA images
-                            if (tensorDescriptor.Shape().Size() != 4 || tensorDescriptor.Shape().GetAt(1) != 3)
-                            {
-                                continue;
-                            }
-                        }
-
-                        HRESULT evalHResult = EvaluateModel(model, args, output, deviceType, inputBindingType, inputDataType, deviceCreationLocation);
-
-                        if (FAILED(evalHResult))
-                        {
-                            return evalHResult;
-                        }
-
-                        if (args.PerfCapture())
-                        {
-                            output.PrintResults(g_Profiler, args.NumIterations(), deviceType, inputBindingType, inputDataType, deviceCreationLocation);
-                            output.WritePerformanceDataToCSV(
-                                g_Profiler,
-                                args.NumIterations(),
-                                path,
-                                TypeHelper::Stringify(deviceType),
-                                TypeHelper::Stringify(inputDataType),
-                                TypeHelper::Stringify(inputBindingType),
-                                TypeHelper::Stringify(deviceCreationLocation),
-                                args.IgnoreFirstRun()
-                            );
-                        }
-                    }
-                }
+                return evalHResult;
+            }
+        }
+        if (args.UseCPUandGPU() || args.UseGPU())
+        {
+            HRESULT evalHResult = EvaluateModel(model, args, &output, args.DeviceKind());
+            if (FAILED(evalHResult))
+            {
+                return evalHResult;
             }
         }
 
-        model.Close();
+        std::string ImgName;
+        if (!args.ImagePath().empty()) {
+            std::wstring img = args.ImagePath();
+            std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+            ImgName = converter.to_bytes(img);
+        }
+
+        else {
+            ImgName = "No Input Image \n";
+        }
+
+        if (args.PerIterCapture()) {
+            output.WritePerformanceDataToCSVPerIteration(g_Profiler, args, args.ModelPath(), ImgName);
+        }
+        output.WritePerformanceDataToCSV(g_Profiler, args, args.ModelPath());
+        output.Reset();
     }
-
-    return S_OK;
-}
-
-std::vector<InputDataType> FetchInputDataTypes(const CommandLineArgs& args)
-{
-    std::vector<InputDataType> inputDataTypes;
-
-    if (args.UseTensor())
+    else if (!args.FolderPath().empty())
     {
-        inputDataTypes.push_back(InputDataType::Tensor);
+        output.PrintHardwareInfo();
+        return EvaluateModelsInDirectory(args, &output);
     }
-
-    if (args.UseRGB())
-    {
-        inputDataTypes.push_back(InputDataType::ImageRGB);
-    }
-
-    if (args.UseBGR())
-    {
-        inputDataTypes.push_back(InputDataType::ImageBGR);
-    }
-
-    return inputDataTypes;
-}
-
-std::vector<DeviceType> FetchDeviceTypes(const CommandLineArgs& args)
-{
-    std::vector<DeviceType> deviceTypes;
-
-    if (args.UseCPU())
-    {
-        deviceTypes.push_back(DeviceType::CPU);
-    }
-
-    if (args.UseGPU())
-    {
-        deviceTypes.push_back(DeviceType::DefaultGPU);
-    }
-
-    if (args.UseGPUHighPerformance())
-    {
-        deviceTypes.push_back(DeviceType::HighPerfGPU);
-    }
-
-    if (args.UseGPUMinPower())
-    {
-        deviceTypes.push_back(DeviceType::MinPowerGPU);
-    }
-
-    return deviceTypes;
-}
-
-std::vector<InputBindingType> FetchInputBindingTypes(const CommandLineArgs& args)
-{
-    std::vector<InputBindingType> inputBindingTypes;
-
-    if (args.UseCPUBoundInput())
-    {
-        inputBindingTypes.push_back(InputBindingType::CPU);
-    }
-
-    if (args.UseGPUBoundInput())
-    {
-        inputBindingTypes.push_back(InputBindingType::GPU);
-    }
-
-    return inputBindingTypes;
-}
-
-std::vector<DeviceCreationLocation> FetchDeviceCreationLocations(const CommandLineArgs& args)
-{
-    std::vector<DeviceCreationLocation> deviceCreationLocations;
-
-    if (args.CreateDeviceInWinML())
-    {
-        deviceCreationLocations.push_back(DeviceCreationLocation::WinML);
-    }
-
-    if (args.CreateDeviceOnClient())
-    {
-        deviceCreationLocations.push_back(DeviceCreationLocation::ClientCode);
-    }
-
-    return deviceCreationLocations;
-}
-
-int main(int argc, char** argv)
-{
-    // Initialize COM in a multi-threaded environment.
-    winrt::init_apartment();
-
-    CommandLineArgs args;
-    OutputHelper output(args.Silent());
-
-    // Profiler is a wrapper class that captures and stores timing and memory usage data on the
-    // CPU and GPU.
-    g_Profiler.Enable();
-
-    if (!args.OutputPath().empty())
-    {
-        output.SetCSVFileName(args.OutputPath());
-    }
-    else
-    {
-        output.SetDefaultCSVFileName();
-    }
-
-    if (!args.ModelPath().empty() || !args.FolderPath().empty())
-    {
-        std::vector<DeviceType> deviceTypes = FetchDeviceTypes(args);
-        std::vector<InputBindingType> inputBindingTypes = FetchInputBindingTypes(args);
-        std::vector<InputDataType> inputDataTypes = FetchInputDataTypes(args);
-        std::vector<DeviceCreationLocation> deviceCreationLocations = FetchDeviceCreationLocations(args);
-        std::vector<std::wstring> modelPaths = args.ModelPath().empty() ? GetModelsInDirectory(args, &output) : std::vector<std::wstring>(1, args.ModelPath());
-
-        return EvaluateModels(modelPaths, deviceTypes, inputBindingTypes, inputDataTypes, deviceCreationLocations, args, output);
-    }
-
     return 0;
 }

@@ -1,62 +1,141 @@
 #pragma once
-#include <random>
-#include <time.h>
 #include "Common.h"
 #include "ModelBinding.h"
-#include "CommandLineArgs.h"
-
-using namespace winrt::Windows::Media;
-using namespace winrt::Windows::Storage;
-using namespace winrt::Windows::AI::MachineLearning;
-using namespace winrt::Windows::Foundation::Collections;
-using namespace winrt::Windows::Graphics::DirectX;
+#include "OutputHelper.h"
 using namespace winrt::Windows::Graphics::Imaging;
-using namespace winrt::Windows::Graphics::DirectX::Direct3D11;
+using namespace Windows::Media;
+using namespace winrt::Windows::Foundation;
+using namespace winrt::Windows::Foundation::Collections;
+using namespace Windows::Storage;
+using namespace winrt::Windows::AI::MachineLearning;
 
 namespace BindingUtilities
 {
-    static unsigned int seed = 0;
-    static std::independent_bits_engine<std::default_random_engine, CHAR_BIT, unsigned int> randomBitsEngine;
-
-    SoftwareBitmap GenerateGarbageImage(const TensorFeatureDescriptor& imageDescriptor, InputDataType inputDataType)
+    void BindTensorsFromGarbageData(LearningModelBinding context, LearningModel model)
     {
-        assert(inputDataType != InputDataType::Tensor);
-
-        // We assume NCHW and NCDHW
-        uint64_t width = imageDescriptor.Shape().GetAt(imageDescriptor.Shape().Size() - 1);
-        uint64_t height = imageDescriptor.Shape().GetAt(imageDescriptor.Shape().Size() - 2);
-        uint64_t channelCount = imageDescriptor.Shape().GetAt(1);
-        uint64_t batchCount = imageDescriptor.Shape().GetAt(0);
-
-        // If the batchCount is infinite, we can put as many images as we want
-        if (batchCount >= ULLONG_MAX)
+        for (auto&& description : model.InputFeatures())
         {
-            batchCount = 3;
+            if (description == nullptr)
+            {
+                std::cout << "BindingUtilities: Learning model has no binding description." << std::endl;
+                throw hresult_invalid_argument();
+            }
+
+            hstring name = description.Name();
+            TensorFeatureDescriptor tensorDescriptor = nullptr;
+            try
+            {
+                tensorDescriptor = description.as<TensorFeatureDescriptor>();
+            }
+            catch (...)
+            {
+                std::cout << "BindingUtilities: Input Descriptor type isn't tensor." << std::endl;
+                throw;
+            }
+
+            TensorKind tensorKind = tensorDescriptor.TensorKind();
+            switch (tensorKind)
+            {
+                case TensorKind::Undefined:
+                {
+                    std::cout << "BindingUtilities: TensorKind is undefined." << std::endl;
+                    throw hresult_invalid_argument();
+                }
+                case TensorKind::Float:
+                {
+                    ModelBinding<float> binding(description);
+                    ITensor tensor = TensorFloat::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::Float16:
+                {
+                    ModelBinding<float> binding(description);
+                    ITensor tensor = TensorFloat16Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::Double:
+                {
+                    ModelBinding<double> binding(description);
+                    ITensor tensor = TensorDouble::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::Int8:
+                {
+                    ModelBinding<uint8_t> binding(description);
+                    ITensor tensor = TensorInt8Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::UInt8:
+                {
+                    ModelBinding<uint8_t> binding(description);
+                    ITensor tensor = TensorUInt8Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::Int16:
+                {
+                    ModelBinding<int16_t> binding(description);
+                    ITensor tensor = TensorInt16Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::UInt16:
+                {
+                    ModelBinding<uint16_t> binding(description);
+                    ITensor tensor = TensorUInt16Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::Int32:
+                {
+                    ModelBinding<int32_t> binding(description);
+                    ITensor tensor = TensorInt32Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::UInt32:
+                {
+                    ModelBinding<uint32_t> binding(description);
+                    ITensor tensor = TensorUInt32Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::Int64:
+                {
+                    ModelBinding<int64_t> binding(description);
+                    ITensor tensor = TensorInt64Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::UInt64:
+                {
+                    ModelBinding<uint64_t> binding(description);
+                    ITensor tensor = TensorUInt64Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::String:
+                {
+                    ModelBinding<hstring> binding(description);
+                    ITensor tensor = TensorString::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                default:
+                {
+                    std::cout << "BindingUtilities: TensorKind binding has not been implemented." << std::endl;
+                    throw hresult_not_implemented();
+                }
+            }
         }
-
-        // We have to create RGBA8 or BGRA8 images, so we need 4 channels
-        uint32_t totalByteSize = static_cast<uint32_t>(width) * static_cast<uint32_t>(height) * 4;
-
-        // Generate values for the image based on a seed
-        std::vector<uint8_t> data(totalByteSize);
-        randomBitsEngine.seed(seed++);
-        std::generate(data.begin(), data.end(), randomBitsEngine);
-
-        // Write the values to a buffer
-        winrt::array_view<const uint8_t> dataView(data);
-        InMemoryRandomAccessStream dataStream;
-        DataWriter dataWriter(dataStream);
-        dataWriter.WriteBytes(dataView);
-        IBuffer buffer = dataWriter.DetachBuffer();
-
-        // Create the software bitmap
-        return SoftwareBitmap::CreateCopyFromBuffer(buffer, TypeHelper::GetBitmapPixelFormat(inputDataType), static_cast<int32_t>(width), static_cast<int32_t>(height));
     }
-
-    SoftwareBitmap LoadImageFile(const hstring& filePath, InputDataType inputDataType)
+    
+    SoftwareBitmap LoadImageFile(hstring filePath, std::vector<int64_t> shape)
     {
-        assert(inputDataType != InputDataType::Tensor);
-
         try
         {
             // open the file
@@ -65,9 +144,25 @@ namespace BindingUtilities
             auto stream = file.OpenAsync(FileAccessMode::Read).get();
             // Create the decoder from the stream
             BitmapDecoder decoder = BitmapDecoder::CreateAsync(stream).get();
+            // Create a transform object with default parameters (no transform)
+            auto transform = BitmapTransform();
+
+            // If input dimensions are different from tensor input, then scale / crop while reading
+            if (decoder.PixelHeight() != shape[2] ||
+                decoder.PixelWidth() != shape[3])
+            {
+                transform.ScaledHeight((uint32_t)shape[2]);
+                transform.ScaledWidth((uint32_t)shape[3]);
+                transform.InterpolationMode(BitmapInterpolationMode::Cubic);
+            }
+
             // get the bitmap
-            SoftwareBitmap softwareBitmap = decoder.GetSoftwareBitmapAsync(TypeHelper::GetBitmapPixelFormat(inputDataType), BitmapAlphaMode::Ignore).get();
-            
+            SoftwareBitmap softwareBitmap = decoder.GetSoftwareBitmapAsync(BitmapPixelFormat::Bgra8,
+                                                                           BitmapAlphaMode::Premultiplied,
+                                                                           transform,
+                                                                           ExifOrientationMode::RespectExifOrientation,
+                                                                           ColorManagementMode::DoNotColorManage).get();
+            // all done
             return softwareBitmap;
         }
         catch (...)
@@ -75,24 +170,6 @@ namespace BindingUtilities
             std::cout << "BindingUtilities: could not open image file, make sure you are using fully qualified paths." << std::endl;
             return nullptr;
         }
-    }
-
-    VideoFrame CreateVideoFrame(const SoftwareBitmap& softwareBitmap, InputBindingType inputBindingType, InputDataType inputDataType, const IDirect3DDevice winrtDevice)
-    {
-        VideoFrame inputImage = VideoFrame::CreateWithSoftwareBitmap(softwareBitmap);
-
-        if (inputBindingType == InputBindingType::GPU)
-        {
-            VideoFrame gpuImage = winrtDevice
-                ? VideoFrame::CreateAsDirect3D11SurfaceBacked(TypeHelper::GetDirectXPixelFormat(inputDataType), softwareBitmap.PixelWidth(), softwareBitmap.PixelHeight(), winrtDevice)
-                : VideoFrame::CreateAsDirect3D11SurfaceBacked(TypeHelper::GetDirectXPixelFormat(inputDataType), softwareBitmap.PixelWidth(), softwareBitmap.PixelHeight());
-
-            inputImage.CopyToAsync(gpuImage).get();
-
-            return gpuImage;
-        }
-
-        return inputImage;
     }
 
     std::vector<std::string> ReadCsvLine(std::ifstream& fileStream)
@@ -123,7 +200,7 @@ namespace BindingUtilities
             throw hresult_invalid_argument(L"CSV Input is size/shape is different from what model expects");
         }
         T* data = binding.GetData();
-        for (const auto &elementString : elementStrings)
+        for (auto &elementString : elementStrings)
         {
             T value;
             std::stringstream(elementString) >> value;
@@ -132,7 +209,8 @@ namespace BindingUtilities
         }
     }
 
-    std::vector<std::string> ParseCSVElementStrings(const std::wstring& csvFilePath)
+    // Binds tensor floats, ints, doubles from CSV data.
+    void BindCSVDataToContext(LearningModelBinding context, LearningModel model, std::wstring csvFilePath)
     {
         std::ifstream fileStream;
         fileStream.open(csvFilePath);
@@ -140,155 +218,212 @@ namespace BindingUtilities
         {
             ThrowFailure(L"BindingUtilities: could not open data file.");
         }
-
-        std::vector<std::string> elementStrings = ReadCsvLine(fileStream);
-
-        return elementStrings;
-    }
-
-    // Binds tensor floats, ints, doubles from CSV data.
-    ITensor CreateBindableTensor(const ILearningModelFeatureDescriptor& description, const std::wstring& csvFilePath)
-    {
-        auto name = description.Name();
-        auto tensorDescriptor = description.try_as<TensorFeatureDescriptor>();
-
-        if (!tensorDescriptor)
+        for (auto&& description : model.InputFeatures())
         {
-            std::cout << "BindingUtilities: Input Descriptor type isn't tensor." << std::endl;
-            throw;
-        }
-
-        switch (tensorDescriptor.TensorKind())
-        {
-            case TensorKind::Undefined:
+            if (description == nullptr)
             {
-                std::cout << "BindingUtilities: TensorKind is undefined." << std::endl;
+
+                std::cout << "BindingUtilities: Learning model has no binding description." << std::endl;
                 throw hresult_invalid_argument();
             }
-            case TensorKind::Float:
-            {
-                ModelBinding<float> binding(description);
-                auto elementStrings = csvFilePath.empty() ? std::vector<std::string>(binding.GetDataBufferSize()) : ParseCSVElementStrings(csvFilePath);
-                WriteDataToBinding<float>(elementStrings, binding);
-                return TensorFloat::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
-            }
-            break;
-            case TensorKind::Float16:
-            {
-                ModelBinding<float> binding(description);
-                auto elementStrings = csvFilePath.empty() ? std::vector<std::string>(binding.GetDataBufferSize()) : ParseCSVElementStrings(csvFilePath);
-                WriteDataToBinding<float>(elementStrings, binding);
-                return TensorFloat16Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
-            }
-            break;
-            case TensorKind::Double:
-            {
-                ModelBinding<double> binding(description);
-                auto elementStrings = csvFilePath.empty() ? std::vector<std::string>(binding.GetDataBufferSize()) : ParseCSVElementStrings(csvFilePath);
-                WriteDataToBinding<double>(elementStrings, binding);
-                return TensorDouble::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
-            }
-            break;
-            case TensorKind::Int8:
-            {
-                ModelBinding<uint8_t> binding(description);
-                auto elementStrings = csvFilePath.empty() ? std::vector<std::string>(binding.GetDataBufferSize()) : ParseCSVElementStrings(csvFilePath);
-                WriteDataToBinding<uint8_t>(elementStrings, binding);
-                return TensorInt8Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
-            }
-            break;
-            case TensorKind::UInt8:
-            {
-                ModelBinding<uint8_t> binding(description);
-                auto elementStrings = csvFilePath.empty() ? std::vector<std::string>(binding.GetDataBufferSize()) : ParseCSVElementStrings(csvFilePath);
-                WriteDataToBinding<uint8_t>(elementStrings, binding);
-                return TensorUInt8Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
-            }
-            break;
-            case TensorKind::Int16:
-            {
-                ModelBinding<int16_t> binding(description);
-                auto elementStrings = csvFilePath.empty() ? std::vector<std::string>(binding.GetDataBufferSize()) : ParseCSVElementStrings(csvFilePath);
-                WriteDataToBinding<int16_t>(elementStrings, binding);
-                return TensorInt16Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
-            }
-            break;
-            case TensorKind::UInt16:
-            {
-                ModelBinding<uint16_t> binding(description);
-                auto elementStrings = csvFilePath.empty() ? std::vector<std::string>(binding.GetDataBufferSize()) : ParseCSVElementStrings(csvFilePath);
-                WriteDataToBinding<uint16_t>(elementStrings, binding);
-                return TensorUInt16Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
-            }
-            break;
-            case TensorKind::Int32:
-            {
-                ModelBinding<int32_t> binding(description);
-                auto elementStrings = csvFilePath.empty() ? std::vector<std::string>(binding.GetDataBufferSize()) : ParseCSVElementStrings(csvFilePath);
-                WriteDataToBinding<int32_t>(elementStrings, binding);
-                return TensorInt32Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
-            }
-            break;
-            case TensorKind::UInt32:
-            {
-                ModelBinding<uint32_t> binding(description);
-                auto elementStrings = csvFilePath.empty() ? std::vector<std::string>(binding.GetDataBufferSize()) : ParseCSVElementStrings(csvFilePath);
-                WriteDataToBinding<uint32_t>(elementStrings, binding);
-                return TensorUInt32Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
-            }
-            break;
-            case TensorKind::Int64:
-            {
-                ModelBinding<int64_t> binding(description);
-                auto elementStrings = csvFilePath.empty() ? std::vector<std::string>(binding.GetDataBufferSize()) : ParseCSVElementStrings(csvFilePath);
-                WriteDataToBinding<int64_t>(elementStrings, binding);
-                return TensorInt64Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
-            }
-            break;
-            case TensorKind::UInt64:
-            {
-                ModelBinding<uint64_t> binding(description);
-                auto elementStrings = csvFilePath.empty() ? std::vector<std::string>(binding.GetDataBufferSize()) : ParseCSVElementStrings(csvFilePath);
-                WriteDataToBinding<uint64_t>(elementStrings, binding);
-                return TensorUInt64Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
-            }
-            break;
-        }
 
-        std::cout << "BindingUtilities: TensorKind has not been implemented." << std::endl;
-        throw hresult_not_implemented();
+            hstring name = description.Name();
+            TensorFeatureDescriptor tensorDescriptor = description.as<TensorFeatureDescriptor>();
+            TensorKind tensorKind = tensorDescriptor.TensorKind();
+
+            std::vector<std::string> elementStrings = ReadCsvLine(fileStream);
+            switch (tensorKind)
+            {
+                case TensorKind::Undefined:
+                {
+                    std::cout << "BindingUtilities: TensorKind is undefined." << std::endl;
+                    throw hresult_invalid_argument();
+                }
+                case TensorKind::Float:
+                {
+                    ModelBinding<float> binding(description);
+
+                    WriteDataToBinding<float>(elementStrings, binding);
+                    ITensor tensor = TensorFloat::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::Float16:
+                {
+                    ModelBinding<float> binding(description);
+                    WriteDataToBinding<float>(elementStrings, binding);
+                    ITensor tensor = TensorFloat16Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::Double:
+                {
+                    ModelBinding<double> binding(description);
+                    WriteDataToBinding<double>(elementStrings, binding);
+                    ITensor tensor = TensorDouble::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::Int8:
+                {
+                    ModelBinding<uint8_t> binding(description);
+                    WriteDataToBinding<uint8_t>(elementStrings, binding);
+                    ITensor tensor = TensorInt8Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::UInt8:
+                {
+                    ModelBinding<uint8_t> binding(description);
+                    WriteDataToBinding<uint8_t>(elementStrings, binding);
+                    ITensor tensor = TensorUInt8Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::Int16:
+                {
+                    ModelBinding<int16_t> binding(description);
+                    WriteDataToBinding<int16_t>(elementStrings, binding);
+                    ITensor tensor = TensorInt16Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::UInt16:
+                {
+                    ModelBinding<uint16_t> binding(description);
+                    WriteDataToBinding<uint16_t>(elementStrings, binding);
+                    ITensor tensor = TensorUInt16Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::Int32:
+                {
+                    ModelBinding<int32_t> binding(description);
+                    WriteDataToBinding<int32_t>(elementStrings, binding);
+                    ITensor tensor = TensorInt32Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::UInt32:
+                {
+                    ModelBinding<uint32_t> binding(description);
+                    WriteDataToBinding<uint32_t>(elementStrings, binding);
+                    ITensor tensor = TensorUInt32Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::Int64:
+                {
+                    ModelBinding<int64_t> binding(description);
+                    WriteDataToBinding<int64_t>(elementStrings, binding);
+                    ITensor tensor = TensorInt64Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                case TensorKind::UInt64:
+                {
+                    ModelBinding<uint64_t> binding(description);
+                    WriteDataToBinding<uint64_t>(elementStrings, binding);
+                    ITensor tensor = TensorUInt64Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+                    context.Bind(name, tensor);
+                }
+                break;
+                default:
+                {
+                    std::cout << "BindingUtilities: TensorKind has not been implemented." << std::endl;
+                    throw hresult_not_implemented();
+                }
+            }
+        }
     }
 
-    ImageFeatureValue CreateBindableImage(
-        const ILearningModelFeatureDescriptor&
-        featureDescriptor,
-        const std::wstring& imagePath,
-        InputBindingType inputBindingType,
-        InputDataType inputDataType,
-        const IDirect3DDevice winrtDevice
-    )
+    void BindImageToContext(LearningModelBinding context, LearningModel model, std::wstring imagePath, float scale, std::array<float,3> mean_std_dev)
     {
-        auto imageDescriptor = featureDescriptor.try_as<TensorFeatureDescriptor>();
-
-        if (!imageDescriptor)
+        context.Clear();
+        for (auto&& description : model.InputFeatures())
         {
-            std::cout << "BindingUtilities: Input Descriptor type isn't tensor." << std::endl;
-            throw;
+            hstring name = description.Name();
+            auto Kind = description.Kind();
+
+            try
+            {
+                TensorFeatureDescriptor tensorDescriptor = description.as<TensorFeatureDescriptor>();
+                std::vector<int64_t> shape = ModelBinding<float>((description.as<TensorFeatureDescriptor>())).GetShapeBuffer();
+
+                auto softwareBitmap = LoadImageFile(imagePath.c_str(), shape);
+                if (softwareBitmap == nullptr)
+                {
+                    std::cout << "BindingUtilities: Cannot bind image to LearningModelBinding." << std::endl;
+                    std::cout << std::endl;
+                    throw_hresult(E_FAIL);
+                }
+
+                if (scale != 1.0 &&
+                     ( mean_std_dev[0] != 0 ||
+                       mean_std_dev[1] != 0 ||
+                       mean_std_dev[2] != 0))
+                {
+                    const auto imgHeight = softwareBitmap.PixelHeight();
+                    const auto imgWidth = softwareBitmap.PixelWidth();
+
+                    Buffer sbBuffer(imgHeight * imgWidth * 4);
+                    softwareBitmap.CopyToBuffer(sbBuffer);
+                    byte *sbBufferData = sbBuffer.data();
+
+                    std::vector<float> resultArrList(shape[2] * shape[3] * shape[1]);
+
+                    //Roll the array correctly for the tensor
+                    for (int i = 0, count = 0; i < imgHeight * imgWidth; ++i, count += 4)
+                    {
+                        resultArrList[i] = (sbBufferData[count] - mean_std_dev[0]) / scale;
+                        resultArrList[i + imgHeight * imgWidth] = (sbBufferData[count + 1] - mean_std_dev[1]) / scale;
+                        resultArrList[i + imgHeight * imgWidth * 2] = (sbBufferData[count + 2] - mean_std_dev[2]) / scale;
+                    }
+
+                    ITensorFloat *inputTensor = nullptr;
+                    TensorKind tensorKind = tensorDescriptor.TensorKind();
+
+                    switch (tensorKind)
+                    {
+                    case TensorKind::Float:
+                    {
+                        ModelBinding<float> binding(description);
+                        auto floatTensor = TensorFloat::CreateFromArray(binding.GetShapeBuffer(), resultArrList);
+                        context.Bind(name, floatTensor);
+                    }
+                    break;
+                    case TensorKind::Float16:
+                    {
+                        ModelBinding<float> binding(description);
+                        auto float16Tensor = TensorFloat16Bit::CreateFromArray(binding.GetShapeBuffer(), resultArrList);
+                        context.Bind(name, float16Tensor);
+                    }
+                    break;
+                    default:
+                        std::cout << "BindingUtilities: Unknown TensorKind for binding." << std::endl;
+                        std::cout << std::endl;
+                        throw_hresult(E_FAIL);
+                    }
+                }
+                else
+                {
+                    auto videoFrame = VideoFrame::CreateWithSoftwareBitmap( softwareBitmap );
+                    auto featureValue = ImageFeatureValue::CreateFromVideoFrame(videoFrame);
+                    context.Bind(name, featureValue);
+                }
+            }
+            catch (hresult_error hr)
+            {
+                std::wcout << hr.message().c_str() << std::endl;
+                throw;
+            }
         }
-
-        auto softwareBitmap = imagePath.empty()
-            ? GenerateGarbageImage(imageDescriptor, inputDataType)
-            : LoadImageFile(imagePath.c_str(), inputDataType);
-
-        auto videoFrame = CreateVideoFrame(softwareBitmap, inputBindingType, inputDataType, winrtDevice);
-
-        return ImageFeatureValue::CreateFromVideoFrame(videoFrame);
     }
 
-    template<typename K, typename V>
-    void OutputSequenceBinding(IMapView<hstring, winrt::Windows::Foundation::IInspectable> results, hstring name)
+    template< typename K, typename V>
+    void OutputSequenceBinding(IMapView<hstring, Windows::Foundation::IInspectable> results, hstring name)
     {
-        auto map = results.Lookup(name).as<IVectorView<IMap<K, V>>>().GetAt(0);
+        auto map = results.Lookup(name).as<IVectorView<IMap<int64_t, float>>>().GetAt(0);
         auto iter = map.First();
 
         K maxKey = -1;
@@ -307,12 +442,157 @@ namespace BindingUtilities
         std::cout << " " << maxKey << " " << maxVal << std::endl;
     }
 
-    void PrintEvaluationResults(const LearningModel& model, const CommandLineArgs& args, const IMapView<hstring, winrt::Windows::Foundation::IInspectable>& results)
+    template< typename K, typename V>
+    winrt::Windows::Foundation::Collections::IMap<int64_t, float> SaveOutputSequenceBinding(IMapView<hstring, Windows::Foundation::IInspectable> results, hstring name, std::string &PerIterResult)
     {
-        if (args.Silent()) return;
-        
+        auto map = results.Lookup(name).as<IVectorView<IMap<int64_t, float>>>().GetAt(0);
+        auto iter = map.First();
+
+        K maxKey = -1;
+        V maxVal = -1;
+
+        while (iter.HasCurrent())
+        {
+            auto pair = iter.Current();
+            if (pair.Value() > maxKey)
+            {
+                maxVal = pair.Value();
+                maxKey = pair.Key();
+            }
+            iter.MoveNext();
+        }
+        PerIterResult = "Key: " + std::to_string(maxKey) + "; Value: " + std::to_string(maxVal);
+        return map;
+    }
+
+    std::string SaveEvaluationResults(LearningModel model, CommandLineArgs args, IMapView<hstring, Windows::Foundation::IInspectable> results, OutputHelper *output, int IterationNum, int &HashCode)
+    {
+        std::string PerIterResult;
+
+        for (auto&& desc : model.OutputFeatures())
+        {
+            if (desc.Kind() == LearningModelFeatureKind::Tensor)
+            {
+                std::wstring name(desc.Name());
+                TensorFeatureDescriptor tensorDescriptor = desc.as<TensorFeatureDescriptor>();
+                TensorKind tensorKind = tensorDescriptor.TensorKind();
+                switch (tensorKind)
+                {
+                case TensorKind::String:
+                {
+                    auto resultVector = results.Lookup(desc.Name()).as<TensorString>().GetAsVectorView();
+                    output->WriteTensorResultToCSV(resultVector, IterationNum);
+                    auto output = resultVector.GetAt(0).data();
+                    std::wstring ws(output);
+                    std::string st(ws.begin(), ws.end());
+                    PerIterResult = st;
+                }
+                break;
+                case TensorKind::Float:
+                {
+                    auto resultVector = results.Lookup(desc.Name()).as<TensorFloat>().GetAsVectorView();
+
+                    output->WriteTensorResultToCSV(resultVector, IterationNum);
+                    UINT maxIndex = 0;
+                    auto maxValue = resultVector.GetAt(0);
+
+                    for (UINT i = 0; i < resultVector.Size(); i++)
+                    {
+                        if (maxValue < resultVector.GetAt(i))
+                        {
+                            maxValue = resultVector.GetAt(i);
+                            maxIndex = i;
+                        }
+                    }
+                    PerIterResult = "Index: " + std::to_string(maxIndex) + "; Value: " + std::to_string(maxValue);
+                    int hash = 1;
+                    for (int i = 0; i < resultVector.Size(); i++)
+                    {
+                        float val = resultVector.GetAt(i);
+                        int fltAsInt = *(int*)(&val);
+                        hash = 31 * hash + fltAsInt;
+                    }
+                    HashCode =  hash;
+                }
+                break;
+                case TensorKind::Float16:
+                {
+                    auto resultVector = results.Lookup(desc.Name()).as<TensorFloat16Bit>().GetAsVectorView();
+                    output->WriteTensorResultToCSV(resultVector, IterationNum);
+                    UINT maxIndex = 0;
+                    auto maxValue = resultVector.GetAt(0);
+
+                    for (UINT i = 0; i < resultVector.Size(); i++)
+                    {
+                        if (maxValue < resultVector.GetAt(i))
+                        {
+                            maxValue = resultVector.GetAt(i);
+                            maxIndex = i;
+                        }
+                    }
+                    PerIterResult = "Index: " + std::to_string(maxIndex) + "; Value: " + std::to_string(maxValue);
+                    int hash = 1;
+                    for (int i = 0; i < resultVector.Size(); i++)
+                    {
+                        float val = resultVector.GetAt(i);
+                        int fltAsInt = *(int*)(&val);
+                        hash = 31 * hash + fltAsInt;
+                    }
+                    HashCode = hash;
+                }
+                break;
+                case TensorKind::Int64:
+                {
+                    auto resultVector = results.Lookup(desc.Name()).as<TensorInt64Bit>().GetAsVectorView();
+                    output->WriteTensorResultToCSV(resultVector, IterationNum);
+                    auto output = resultVector.GetAt(0);
+                    PerIterResult = "Result: " + std::to_string(output);
+                    int hash = 1;
+                    unsigned long val = resultVector.GetAt(0);
+                    unsigned long Int64AsInt = *(int*)(&val);
+                    hash = 31 * hash + (int)(Int64AsInt ^ (Int64AsInt >> 32));
+                    HashCode = hash;
+                }
+                break;
+                default:
+                {
+                    std::cout << "BindingUtilities: output type not implemented.";
+                }
+                break;
+                }
+            }
+            else if (desc.Kind() == LearningModelFeatureKind::Sequence)
+            {
+                std::cout << "**********WARNING**********\nSequence type Ouptut encountered \nPerIterationResults need to be Verified\n***************************\n";
+                auto seqDescriptor = desc.as<SequenceFeatureDescriptor>();
+                auto mapDescriptor = seqDescriptor.ElementDescriptor().as<MapFeatureDescriptor>();
+                auto keyKind = mapDescriptor.KeyKind();
+                auto valueKind = mapDescriptor.ValueDescriptor();
+                auto tensorKind = valueKind.as<TensorFeatureDescriptor>().TensorKind();
+                winrt::Windows::Foundation::Collections::IMap<int64_t, float> KeyValue;
+                switch (keyKind)
+                {
+                case TensorKind::Int64:
+                {
+                    KeyValue = SaveOutputSequenceBinding<int64_t, float>(results, desc.Name(), PerIterResult);
+                }
+                break;
+                case TensorKind::Float:
+                {
+                    KeyValue = SaveOutputSequenceBinding<float, float>(results, desc.Name(), PerIterResult);
+                }
+                break;
+                }
+                output->WriteSequenceResultToCSV(KeyValue, IterationNum);
+            }
+        }
+        return PerIterResult;
+    }
+
+
+    void PrintEvaluationResults(LearningModel model, CommandLineArgs args, IMapView<hstring, Windows::Foundation::IInspectable> results)
+    {
         std::cout << "Outputting results.. " << std::endl;
-        
         for (auto&& desc : model.OutputFeatures())
         {
             if (desc.Kind() == LearningModelFeatureKind::Tensor)
@@ -335,7 +615,7 @@ namespace BindingUtilities
                     auto resultVector = results.Lookup(desc.Name()).as<TensorFloat>().GetAsVectorView();
                     UINT maxIndex = 0;
                     auto maxValue = resultVector.GetAt(0);
-
+                    
                     for (UINT i = 0; i < resultVector.Size(); i++)
                     {
                         if (maxValue < resultVector.GetAt(i))
@@ -345,6 +625,23 @@ namespace BindingUtilities
                         }
                     }
 
+                    std::wcout << " resultVector[" << maxIndex << "] has the maximal value of " << maxValue << std::endl;
+                }
+                break;
+                case TensorKind::Float16:
+                {
+                    auto resultVector = results.Lookup(desc.Name()).as<TensorFloat16Bit>().GetAsVectorView();
+                    UINT maxIndex = 0;
+                    auto maxValue = resultVector.GetAt(0);
+                    
+                    for (UINT i = 0; i < resultVector.Size(); i++)
+                    {
+                        if (maxValue < resultVector.GetAt(i))
+                        {
+                            maxValue = resultVector.GetAt(i);
+                            maxIndex = i;
+                        }
+                    }
                     std::wcout << " resultVector[" << maxIndex << "] has the maximal value of " << maxValue << std::endl;
                 }
                 break;
@@ -385,6 +682,20 @@ namespace BindingUtilities
                 }
             }
             std::cout << std::endl;
+        }
+    }
+
+    void BindGarbageDataToContext(LearningModelBinding context, LearningModel model)
+    {
+        context.Clear();
+        try
+        {
+            BindTensorsFromGarbageData(context, model);
+        }
+        catch (...)
+        {
+            std::cout << "Could not bind from garbage data. Currently only supports binding garbage data for tensor inputs." << std::endl;
+            throw;
         }
     }
  };
