@@ -157,11 +157,16 @@ namespace BindingUtilities
             }
 
             // get the bitmap
+#if 0
             SoftwareBitmap softwareBitmap = decoder.GetSoftwareBitmapAsync(BitmapPixelFormat::Bgra8,
                                                                            BitmapAlphaMode::Premultiplied,
                                                                            transform,
                                                                            ExifOrientationMode::RespectExifOrientation,
                                                                            ColorManagementMode::DoNotColorManage).get();
+#endif
+
+            SoftwareBitmap softwareBitmap = decoder.GetSoftwareBitmapAsync(BitmapPixelFormat::Bgra8,
+                                                                           BitmapAlphaMode::Ignore).get();
             // all done
             return softwareBitmap;
         }
@@ -370,7 +375,7 @@ namespace BindingUtilities
                     softwareBitmap.CopyToBuffer(sbBuffer);
                     byte *sbBufferData = sbBuffer.data();
 
-                    std::vector<float> resultArrList(shape[2] * shape[3] * shape[1]);
+                    std::vector<float> resultArrList(imgHeight * imgWidth * 4);
 
                     //Roll the array correctly for the tensor
                     for (int i = 0, count = 0; i < imgHeight * imgWidth; ++i, count += 4)
