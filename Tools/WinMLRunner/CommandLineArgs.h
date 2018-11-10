@@ -15,6 +15,7 @@ public:
     bool PerfCapture() const { return m_perfCapture; }
     bool EnableDebugOutput() const { return m_debug; }
     bool Silent() const { return m_silent; }
+    bool PerIterCapture() const { return m_perIterCapture; }
     bool CreateDeviceOnClient() const { return m_createDeviceOnClient; }
    
     const std::wstring& ImagePath() const { return m_imagePath; }
@@ -78,6 +79,7 @@ private:
     bool m_ignoreFirstRun = false;
     bool m_debug = false;
     bool m_silent = false;
+    bool m_perIterCapture = false;
 
     std::wstring m_modelFolderPath;
     std::wstring m_modelPath;

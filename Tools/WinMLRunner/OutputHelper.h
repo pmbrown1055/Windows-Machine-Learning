@@ -1,11 +1,13 @@
 #pragma once
 #include "Common.h"
+#include "CommandLineArgs.h"
 #include <fstream>
 #include <ctime>
 #include <locale>
 #include <utility>
 #include <codecvt>
 #include <iomanip>
+#include <direct.h>
 
 using namespace winrt::Windows::AI::MachineLearning;
 using namespace Windows::Storage::Streams;
@@ -14,7 +16,15 @@ using namespace Windows::Storage::Streams;
 class OutputHelper
 {
 public:
-    OutputHelper(bool silent) : m_silent(silent) {}
+    OutputHelper(int num, bool silent)
+    {
+        m_silent = silent;
+        m_CPUWorkingDiff.resize(num, 0.0);
+        m_CPUWorkingStart.resize(num, 0.0);
+        m_GPUSharedDiff.resize(num, 0.0);
+        m_GPUDedicatedDiff.resize(num, 0.0);
+        m_GPUSharedStart.resize(num, 0.0);
+    }
 
     void PrintLoadingInfo(const std::wstring& modelPath) const
     {
@@ -273,6 +283,49 @@ public:
         return false;
     }
 
+    void SaveEvalTimes(Profiler<WINML_MODEL_TEST_PERF> &profiler, uint32_t IterNum)
+    {
+        m_CPUWorkingDiff[IterNum] = profiler[EVAL_MODEL].GetCpuWorkingDiff();
+        m_CPUWorkingStart[IterNum] = profiler[EVAL_MODEL].GetCpuWorkingStart();
+        m_GPUSharedDiff[IterNum] = profiler[EVAL_MODEL].GetGpuSharedDiff();
+        m_GPUSharedStart[IterNum] = profiler[EVAL_MODEL].GetGpuSharedStart();
+        m_GPUDedicatedDiff[IterNum] = profiler[EVAL_MODEL].GetGpuDedicatedDiff();
+    }
+    
+    void SaveResult(std::vector<std::string> &IterRes, std::vector <int> &TensorHash) 
+    {
+        m_Result = IterRes;
+        m_Hash = TensorHash;
+    }
+    
+    void SetDefaultFolder()
+    {
+        auto time = std::time(nullptr);
+        struct tm localTime;
+        localtime_s(&localTime, &time);
+        std::string cur_dir = _getcwd(NULL, 0);
+        std::ostringstream oss;
+        oss << std::put_time(&localTime, "%Y-%m-%d_%H.%M.%S");
+        std::string folderName = "\\Run[" + oss.str() + "]";
+        folder = cur_dir + folderName;
+        if (_mkdir(folder.c_str()) != 0)
+            std::cout << "Folder cannot be created";
+    }
+    
+    void SetDefaultCSVFileNamePerIteration()
+    {
+        fileNameIter = folder + "\\PerIterationValues.csv";
+        std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+        m_csvFileNamePerIteration = converter.from_bytes(fileNameIter);
+    }
+    
+    void SetDefaultCSVResult()
+    {
+        fileNameRes = folder + "\\Result[FullOutputTensor].csv";
+        std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+        m_csvResult = converter.from_bytes(fileNameRes);
+    }
+
     void SetDefaultCSVFileName() 
     {
         auto time = std::time(nullptr);
@@ -354,7 +407,9 @@ public:
                      << "Wall-clock Load (ms)" << ","
                      << "Wall-clock Bind (ms)" << ","
                      << "Wall-clock Evaluate (ms)" << ","
-                     << "Wall-clock total time (ms)" << std::endl;
+                     << "Wall-clock total time (ms)" << ","
+                     << "PerIterationFile" << ","
+                     << "ResultFile" <<std::endl;
             }
 
             fout << modelName << ","
@@ -374,8 +429,179 @@ public:
                  << m_clockLoadTime << ","
                  << clockBindTime << ","
                  << clockEvalTime << ","
-                 << m_clockLoadTime + clockBindTime + clockEvalTime << std::endl;
+                 << m_clockLoadTime + clockBindTime + clockEvalTime << "," 
+                 << fileNameIter << ","
+                 << fileNameRes << std::endl;
 
+            fout.close();
+        }
+    }
+
+    template<typename T>
+    void WriteTensorResultToCSV(winrt::Windows::Foundation::Collections::IVectorView<T> &m_Res, int IterNo)
+    {
+        if (m_csvResult.length() > 0)
+        {
+            bool bNewFile = false;
+
+            std::ifstream fin;
+            fin.open(m_csvResult);
+            std::filebuf* outbuf = fin.rdbuf();
+            if (EOF == outbuf->sbumpc())
+            {
+                bNewFile = true;
+            }
+            fin.close();
+
+            std::ofstream fout;
+            fout.open(m_csvResult, std::ios_base::app);
+
+            if (bNewFile)
+            {
+                fout << "IterationNumber " << ",";
+                for (int i = 0; i < m_Res.Size(); i++)
+                    fout << "Result[" << i << "]" << ",";
+                fout << std::endl;
+            }
+
+            fout << IterNo << ",";
+            for (int i = 0; i < m_Res.Size(); i++)
+                fout << m_Res.GetAt(i) << ",";
+            fout << std::endl;
+            fout.close();
+        }
+    }
+
+    template<>
+    void WriteTensorResultToCSV(winrt::Windows::Foundation::Collections::IVectorView<winrt::hstring> &m_Res, int IterNo)
+    {
+        if (m_csvResult.length() > 0)
+        {
+            bool bNewFile = false;
+
+            std::ifstream fin;
+            fin.open(m_csvResult);
+            std::filebuf* outbuf = fin.rdbuf();
+            if (EOF == outbuf->sbumpc())
+            {
+                bNewFile = true;
+            }
+            fin.close();
+
+            std::ofstream fout;
+            fout.open(m_csvResult, std::ios_base::app);
+
+            if (bNewFile)
+            {
+                fout << "IterationNumber " << "," << "Result[0]" << ",";
+                fout << std::endl;
+            }
+            fout << IterNo << "," << m_Res.GetAt(0).data() << std::endl;
+            fout.close();
+        }
+    }
+
+    void WriteSequenceResultToCSV(winrt::Windows::Foundation::Collections::IMap<int64_t, float> &m_Map, int IterNo)
+    {
+        if (m_csvResult.length() > 0)
+        {
+            bool bNewFile = false;
+
+            std::ifstream fin;
+            fin.open(m_csvResult);
+            std::filebuf* outbuf = fin.rdbuf();
+            if (EOF == outbuf->sbumpc())
+            {
+                bNewFile = true;
+            }
+            fin.close();
+
+            std::ofstream fout;
+            fout.open(m_csvResult, std::ios_base::app);
+
+            auto iter = m_Map.First();
+            if (bNewFile)
+            {
+                fout << "IterationNumber " << ",";
+                while (iter.HasCurrent())
+                {
+                    auto pair = iter.Current();
+                    fout << "Key[" << pair.Key() << "]" << ",";
+                    iter.MoveNext();
+                }
+                fout << std::endl;
+            }
+            iter = m_Map.First();
+            fout << IterNo << ",";
+            while (iter.HasCurrent())
+            {
+                auto pair = iter.Current();
+                fout << pair.Key() << ";" << pair.Value() << ",";
+                iter.MoveNext();
+            }
+            fout << std::endl;
+            fout.close();
+        }
+    }
+
+    void WritePerformanceDataToCSVPerIteration(Profiler<WINML_MODEL_TEST_PERF> &profiler, const CommandLineArgs& args, std::wstring model, std::wstring img)
+    {
+        if (m_csvFileNamePerIteration.length() > 0)
+        {
+            bool bNewFile = false;
+            std::ifstream fin;
+            fin.open(m_csvFileNamePerIteration);
+            std::filebuf* outbuf = fin.rdbuf();
+            if (EOF == outbuf->sbumpc())
+            {
+                bNewFile = true;
+            }
+            fin.close();
+            
+            std::ofstream fout;
+            fout.open(m_csvFileNamePerIteration, std::ios_base::app);
+            
+            std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+            std::string modelName = converter.to_bytes(model);
+            std::string imgName = converter.to_bytes(img);
+            
+            if (bNewFile)
+            {
+                fout << "Model Name" << ","
+                     << "Image Name" << ","
+                     << "Iterations" << ","
+                     << "Iteration Number " << ","
+                     << "Result" << ","
+                     << "Hash" << ","
+                     << "CPU Working Set Diff" << ","
+                     << "CPU Working Set Start (MB)" << ","
+                     << "GPU Shared Memory Diff (MB)" << ","
+                     << "GPU Shared Memory Start (MB)" << ","
+                     << "GPU Dedicated Memory Diff (MB)" << ","
+                     << "Load (ms)" << ","
+                     << "Bind (ms)" << ","
+                     << "Evaluate (ms)" << "," << std::endl;
+            }
+
+            m_clockLoadTimes.resize(args.NumIterations(), 0.0);
+
+            for (int i = 0; i < args.NumIterations(); i++) 
+            {
+                fout << modelName << ","
+                     << imgName << ","
+                     << args.NumIterations() << ","
+                     << i + 1 << ","
+                     << m_Result[i] << ","
+                     << m_Hash[i] << ","
+                     << m_CPUWorkingDiff[i] << ","
+                     << m_CPUWorkingStart[i] << ","
+                     << m_GPUSharedDiff[i] << ","
+                     << m_GPUSharedStart[i] << ","
+                     << m_GPUDedicatedDiff[i] << ","
+                     << m_clockLoadTimes[i] << ","
+                     << m_clockBindTimes[i] << ","
+                     << m_clockEvalTimes[i] << std::endl;
+            }
             fout.close();
         }
     }
@@ -389,16 +615,41 @@ public:
          m_clockEvalTimes.clear();
     }
 
+    void ResetMemoryAndResult()
+    {
+        m_CPUWorkingDiff.clear();
+        m_CPUWorkingStart.clear();
+        m_GPUSharedDiff.clear();
+        m_GPUDedicatedDiff.clear();
+        m_GPUSharedStart.clear();
+        m_Result.clear();
+        m_Hash.clear();
+    }
+
     double m_clockLoadTime = 0;
 
+    std::vector<double> m_clockLoadTimes;
     std::vector<double> m_clockBindTimes;
     std::vector<double> m_clockEvalTimes;
 
 private:
     std::wstring m_csvFileName;
+    std::wstring m_csvFileNamePerIteration;
+    std::wstring m_csvResult;
+    std::string folder;
+    std::string fileNameIter;
+    std::string fileNameRes;
 
     double m_clockBindTime = 0;
     double m_clockEvalTime = 0;
 
     bool m_silent = false;
+
+    std::vector<double> m_CPUWorkingDiff;
+    std::vector<double> m_CPUWorkingStart;
+    std::vector<double> m_GPUSharedDiff;
+    std::vector<double> m_GPUSharedStart;
+    std::vector<double> m_GPUDedicatedDiff;
+    std::vector<std::string> m_Result;
+    std::vector<int> m_Hash;
 };
