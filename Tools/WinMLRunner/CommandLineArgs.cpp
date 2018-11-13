@@ -30,6 +30,7 @@ void CommandLineArgs::PrintUsage() {
     std::cout << "  -silent: only errors are printed to the console" << std::endl;
     std::cout << "  -debug: print trace logs" << std::endl;
     std::cout << "  -autoScale <interpolationMode>: Enable image autoscaling and set the interpolation mode [Nearest, Linear, Cubic, Fant]" << std::endl;
+    std::cout << "  -inputImagePreprocess <scale> <msdR> <msdG> <msdB>: float scale factor and per channel meanStdDev factors to preprocess input images before being passed ot the model" << std::endl;
 }
 
 CommandLineArgs::CommandLineArgs()
@@ -37,7 +38,7 @@ CommandLineArgs::CommandLineArgs()
     int numArgs = 0;
     LPWSTR* args = CommandLineToArgvW(GetCommandLineW(), &numArgs);
 
-    for (int i = 0; i < numArgs; i++)
+    for (int i = 1; i < numArgs; i++)
     {
         if ((_wcsicmp(args[i], L"-CPU") == 0))
         {
@@ -144,6 +145,14 @@ CommandLineArgs::CommandLineArgs()
                 PrintUsage();
                 return;
             }
+        }
+        else if ((_wcsicmp(args[i], L"-inputImagePreprocess") == 0) && (i + 4 < numArgs))
+        {
+            m_inputImagePreProcess = true;
+            m_scaleFactor = _wtof(args[++i]);
+            m_meanStdDev[0] = _wtof(args[++i]);
+            m_meanStdDev[1] = _wtof(args[++i]);
+            m_meanStdDev[2] = _wtof(args[++i]);
         }
         else if ((_wcsicmp(args[i], L"/?") == 0))
         {

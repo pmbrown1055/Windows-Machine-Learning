@@ -145,6 +145,35 @@ namespace BindingUtilities
     }
 
     template <typename T>
+    void PreProcessImageToBinding(const SoftwareBitmap& softwareBitmap, ModelBinding<T>& binding, float scale, const std::array<float, 3>& meanStdDev)
+    {
+        const auto imgHeight = softwareBitmap.PixelHeight();
+        const auto imgWidth = softwareBitmap.PixelWidth();
+        const auto resultSize = imgHeight * imgWidth * 3;
+        if (binding.GetDataBufferSize() != resultSize)
+        {
+            throw hresult_invalid_argument(L"Image Input size/shape is different from what model expects");
+        }
+
+        T* bindingData = binding.GetData();
+        if (scale != 1.0f &&
+            (meanStdDev[0] != 0 || meanStdDev[1] != 0 || meanStdDev[2] != 0))
+        {
+            Buffer sbBuffer(imgHeight * imgWidth * 4);
+            softwareBitmap.CopyToBuffer(sbBuffer);
+            uint8_t *sbBufferData = sbBuffer.data();
+
+            //Roll the array correctly for the tensor
+            for (int i = 0, count = 0; i < imgHeight * imgWidth; ++i, count += 4)
+            {
+                bindingData[i] = (sbBufferData[count] - meanStdDev[0]) / scale;
+                bindingData[i + imgHeight * imgWidth] = (sbBufferData[count + 1] - meanStdDev[1]) / scale;
+                bindingData[i + imgHeight * imgWidth * 2] = (sbBufferData[count + 2] - meanStdDev[2]) / scale;
+            }
+        }
+    }
+
+    template <typename T>
     void WriteDataToBinding(const std::vector<std::string>& elementStrings, ModelBinding<T>& binding)
     {
         if (binding.GetDataBufferSize() != elementStrings.size())
@@ -289,8 +318,7 @@ namespace BindingUtilities
     }
 
     ImageFeatureValue CreateBindableImage(
-        const ILearningModelFeatureDescriptor&
-        featureDescriptor,
+        const ILearningModelFeatureDescriptor& featureDescriptor,
         const std::wstring& imagePath,
         InputBindingType inputBindingType,
         InputDataType inputDataType,
@@ -313,6 +341,112 @@ namespace BindingUtilities
         auto videoFrame = CreateVideoFrame(softwareBitmap, inputBindingType, inputDataType, winrtDevice);
 
         return ImageFeatureValue::CreateFromVideoFrame(videoFrame);
+    }
+
+    ITensor CreateBindableTensorFromImage(
+        const ILearningModelFeatureDescriptor& description,
+        InputDataType inputDataType,
+        const CommandLineArgs args
+    )
+    {
+        auto name = description.Name();
+        const TensorFeatureDescriptor& tensorDescription = description.try_as<TensorFeatureDescriptor>();
+
+        if (!tensorDescription)
+        {
+            std::cout << "BindingUtilities: Input Description type isn't tensor." << std::endl;
+            throw;
+        }
+
+        auto softwareBitmap = LoadImageFile(tensorDescription, inputDataType, args.ImagePath().c_str(), args);
+        switch (tensorDescription.TensorKind())
+        {
+            case TensorKind::Undefined:
+            {
+                std::cout << "BindingUtilities: TensorKind is undefined." << std::endl;
+                throw hresult_invalid_argument();
+            }
+            case TensorKind::Float:
+            {
+                ModelBinding<float> binding(description);
+                PreProcessImageToBinding<float>(softwareBitmap, binding, args.Scale(), args.MeanStdDev());
+                return TensorFloat::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+            }
+            break;
+            case TensorKind::Float16:
+            {
+                ModelBinding<float> binding(description);
+                PreProcessImageToBinding<float>(softwareBitmap, binding, args.Scale(), args.MeanStdDev());
+                return TensorFloat16Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+            }
+            break;
+            case TensorKind::Double:
+            {
+                ModelBinding<double> binding(description);
+                PreProcessImageToBinding<double>(softwareBitmap, binding, args.Scale(), args.MeanStdDev());
+                return TensorDouble::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+            }
+            break;
+            case TensorKind::Int8:
+            {
+                ModelBinding<uint8_t> binding(description);
+                PreProcessImageToBinding<uint8_t>(softwareBitmap, binding, args.Scale(), args.MeanStdDev());
+                return TensorInt8Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+            }
+            break;
+            case TensorKind::UInt8:
+            {
+                ModelBinding<uint8_t> binding(description);
+                PreProcessImageToBinding<uint8_t>(softwareBitmap, binding, args.Scale(), args.MeanStdDev());
+                return TensorUInt8Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+            }
+            break;
+            case TensorKind::Int16:
+            {
+                ModelBinding<int16_t> binding(description);
+                PreProcessImageToBinding<int16_t>(softwareBitmap, binding, args.Scale(), args.MeanStdDev());
+                return TensorInt16Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+            }
+            break;
+            case TensorKind::UInt16:
+            {
+                ModelBinding<uint16_t> binding(description);
+                PreProcessImageToBinding<uint16_t>(softwareBitmap, binding, args.Scale(), args.MeanStdDev());
+                return TensorUInt16Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+            }
+            break;
+            case TensorKind::Int32:
+            {
+                ModelBinding<int32_t> binding(description);
+                PreProcessImageToBinding<int32_t>(softwareBitmap, binding, args.Scale(), args.MeanStdDev());
+                return TensorInt32Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+            }
+            break;
+            case TensorKind::UInt32:
+            {
+                ModelBinding<uint32_t> binding(description);
+                PreProcessImageToBinding<uint32_t>(softwareBitmap, binding, args.Scale(), args.MeanStdDev());
+                return TensorUInt32Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+            }
+            break;
+            case TensorKind::Int64:
+            {
+                ModelBinding<int64_t> binding(description);
+                PreProcessImageToBinding<int64_t>(softwareBitmap, binding, args.Scale(), args.MeanStdDev());
+                return TensorInt64Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+            }
+            break;
+            case TensorKind::UInt64:
+            {
+                ModelBinding<uint64_t> binding(description);
+                PreProcessImageToBinding<uint64_t>(softwareBitmap, binding, args.Scale(), args.MeanStdDev());
+                return TensorUInt64Bit::CreateFromArray(binding.GetShapeBuffer(), binding.GetDataBuffer());
+            }
+            break;
+        }
+
+        std::cout << "BindingUtilities: TensorKind has not been implemented." << std::endl;
+        throw hresult_not_implemented();
     }
 
     template<typename K, typename V>

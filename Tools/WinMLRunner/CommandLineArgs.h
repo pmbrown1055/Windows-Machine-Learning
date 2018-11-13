@@ -17,14 +17,18 @@ public:
     bool Silent() const { return m_silent; }
     bool CreateDeviceOnClient() const { return m_createDeviceOnClient; }
     bool AutoScale() const { return m_autoScale; }
-    BitmapInterpolationMode AutoScaleInterpMode() const { return m_autoScaleInterpMode; }
-   
+    bool InputImagePreProcess() const { return m_inputImagePreProcess; }
+
     const std::wstring& ImagePath() const { return m_imagePath; }
     const std::wstring& CsvPath() const { return m_csvData; }
     const std::wstring& OutputPath() const { return m_outputPath; }
     const std::wstring& FolderPath() const { return m_modelFolderPath; }
     const std::wstring& ModelPath() const { return m_modelPath; }
 
+    BitmapInterpolationMode AutoScaleInterpMode() const { return m_autoScaleInterpMode; }
+    float Scale() const { return m_scaleFactor; }
+    const std::array<float, 3>& MeanStdDev() const { return m_meanStdDev; }
+   
     void SetModelPath(std::wstring path) { m_modelPath = path; }
 
     bool UseRGB() const
@@ -82,6 +86,7 @@ private:
     bool m_silent = false;
     bool m_autoScale = false;
     BitmapInterpolationMode m_autoScaleInterpMode = BitmapInterpolationMode::Cubic;
+    bool m_inputImagePreProcess = false;
 
     std::wstring m_modelFolderPath;
     std::wstring m_modelPath;
@@ -90,4 +95,7 @@ private:
     std::wstring m_inputData;
     std::wstring m_outputPath;
     uint32_t m_numIterations = 1;
+
+    float m_scaleFactor = 1.0f;
+    std::array<float, 3> m_meanStdDev{ 0, 0, 0 };
 };

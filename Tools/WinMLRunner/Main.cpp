@@ -86,6 +86,11 @@ std::vector<ILearningModelFeatureValue> GenerateInputFeatures(
             auto tensorFeature = BindingUtilities::CreateBindableTensor(description, csvPath);
             inputFeatures.push_back(tensorFeature);
         }
+        else if (!args.ImagePath().empty() && args.InputImagePreProcess())
+        {
+            auto tensorFeature = BindingUtilities::CreateBindableTensorFromImage(description, inputDataType, args);
+            inputFeatures.push_back(tensorFeature);
+        }
         else
         {
             auto imageFeature = BindingUtilities::CreateBindableImage(description, args.ImagePath(), inputBindingType, inputDataType, winrtDevice, args);
@@ -270,7 +275,7 @@ HRESULT EvaluateModel(
     // Add one more iteration if we ignore the first run
     uint32_t numIterations = args.NumIterations() + args.IgnoreFirstRun();
 
-    bool isGarbageData = !args.CsvPath().empty() || !args.ImagePath().empty();
+    bool isGarbageData = args.CsvPath().empty() && args.ImagePath().empty();
 
     // Run the binding + evaluate multiple times and average the results
     for (uint32_t i = 0; i < numIterations; i++)
