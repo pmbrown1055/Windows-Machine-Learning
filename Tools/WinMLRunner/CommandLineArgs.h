@@ -15,6 +15,7 @@ public:
     bool PerfCapture() const { return m_perfCapture; }
     bool EnableDebugOutput() const { return m_debug; }
     bool Silent() const { return m_silent; }
+    bool PerIterCapture() const { return m_perIterCapture; }
     bool CreateDeviceOnClient() const { return m_createDeviceOnClient; }
     bool AutoScale() const { return m_autoScale; }
     BitmapInterpolationMode AutoScaleInterpMode() const { return m_autoScaleInterpMode; }
@@ -82,6 +83,7 @@ private:
     bool m_silent = false;
     bool m_autoScale = false;
     BitmapInterpolationMode m_autoScaleInterpMode = BitmapInterpolationMode::Cubic;
+    bool m_perIterCapture = false;
 
     std::wstring m_modelFolderPath;
     std::wstring m_modelPath;

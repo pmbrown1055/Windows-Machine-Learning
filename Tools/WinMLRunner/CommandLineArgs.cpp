@@ -28,6 +28,7 @@ void CommandLineArgs::PrintUsage() {
     std::cout << "  -output <fully qualified path>: csv file to write the perf results to" << std::endl;
     std::cout << "  -IgnoreFirstRun : ignore the first run in the perf results when calculating the average" << std::endl;
     std::cout << "  -silent: only errors are printed to the console" << std::endl;
+    std::cout << "  -saveiter : saves per iteration values and full results to csv files" << std::endl;
     std::cout << "  -debug: print trace logs" << std::endl;
     std::cout << "  -autoScale <interpolationMode>: Enable image autoscaling and set the interpolation mode [Nearest, Linear, Cubic, Fant]" << std::endl;
 }
@@ -144,6 +145,10 @@ CommandLineArgs::CommandLineArgs()
                 PrintUsage();
                 return;
             }
+        }
+        else if ((_wcsicmp(args[i], L"-saveiter") == 0))
+        {
+            m_perIterCapture = true;
         }
         else if ((_wcsicmp(args[i], L"/?") == 0))
         {
