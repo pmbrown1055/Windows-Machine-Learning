@@ -358,7 +358,7 @@ namespace BindingUtilities
             throw;
         }
 
-        auto softwareBitmap = LoadImageFile(args.ImagePath().c_str(), inputDataType);
+        auto softwareBitmap = LoadImageFile(tensorDescriptor, inputDataType, args.ImagePath().c_str(), args);
         switch (tensorDescriptor.TensorKind())
         {
             case TensorKind::Undefined:
