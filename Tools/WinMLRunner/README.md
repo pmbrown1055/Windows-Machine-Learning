@@ -41,6 +41,7 @@ Required command-Line arguments:
 -silent                  : Silent mode (only errors will be printed to the console)
 -debug                   : Will start a trace logging session.
 -autoScale <mode>        : Will automatically scale an input image to match the required input dimensions of the model.  Pass in the interpolation mode, one of ["Nearest", "Linear", "Cubic", "Fant"].
+-inputImagePreprocess <scale> <msdR> <msdG> <msdB> : Will automatically preprocess the input image before it's sent to the model.  This will enable correct output for models that require this preprocessing.
 
  ```
 
