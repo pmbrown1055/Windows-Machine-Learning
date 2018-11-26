@@ -10,6 +10,7 @@
 #include <winrt/Windows.Media.h>
 #include <winrt/Windows.Storage.h>
 #include <winrt/Windows.Storage.Streams.h>
+#include <winrt/Windows.Data.Json.h>
 #include <vector>
 #include <string>
 #include <iostream>
@@ -87,4 +88,11 @@ inline void ThrowIfFailed(HRESULT hr, const std::wstring &errorMsg = L"")
 inline void ThrowFailure(const std::wstring &errorMsg)
 {
 	throw errorMsg;
+}
+
+inline bool isFloat(std::string myStr) {
+    std::istringstream iss(myStr);
+    float f;
+    iss >> std::noskipws >> f;
+    return iss.eof() && !iss.fail();
 }

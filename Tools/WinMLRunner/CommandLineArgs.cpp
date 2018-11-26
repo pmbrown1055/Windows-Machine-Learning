@@ -4,6 +4,7 @@
 #include "CommandLineArgs.h"
 
 using namespace Windows::AI::MachineLearning;
+using namespace winrt::Windows::Data::Json;
 
 void CommandLineArgs::PrintUsage() {
     std::cout << "WinML Runner" << std::endl;
@@ -31,6 +32,23 @@ void CommandLineArgs::PrintUsage() {
     std::cout << "  -debug: print trace logs" << std::endl;
     std::cout << "  -autoScale <interpolationMode>: Enable image autoscaling and set the interpolation mode [Nearest, Linear, Cubic, Fant]" << std::endl;
     std::cout << "  -inputImagePreprocess <scale> <msdR> <msdG> <msdB>: float scale factor and per channel meanStdDev factors to preprocess input images before being passed ot the model" << std::endl;
+}
+
+void CommandLineArgs::jsonPreProc(JsonObject const &obj, std::wstring keywStr, float &inputArg) {
+    std::wstring prewStr = obj.GetNamedString(keywStr, L"").c_str();
+    std::string keyStr(keywStr.begin(), keywStr.end());
+    if (!prewStr.empty()) {
+        std::string preStr(prewStr.begin(), prewStr.end());
+        float preF = 1.0f;
+        if (isFloat(preStr)) {
+            std::string::size_type sz;
+            preF = std::stof(preStr, &sz);
+            inputArg = preF;
+        }
+        else {
+            std::cout << "NOTE: " << keyStr << " option " << preStr << " not valid. Set to " << inputArg << std::endl;
+        }
+    }
 }
 
 CommandLineArgs::CommandLineArgs()
@@ -178,6 +196,74 @@ CommandLineArgs::CommandLineArgs()
         {
             m_csvData = m_inputData;
         }
+    }
+
+    //read from default json
+    if (!m_modelPath.empty()) {
+        std::wstring modelDir = m_modelPath;
+        std::string modelPath(modelDir.begin(), modelDir.end());
+        size_t found = modelPath.rfind('\\');
+        std::string jsonDir;
+        if (found != std::string::npos) {
+            jsonDir = modelPath.substr(0, found);
+        }
+        std::ifstream file;
+        file.open(jsonDir + "/PreProcess.json");
+        if (!file.fail()) {
+            std::string parameters = "";
+            std::string item;
+            while (file) {
+                getline(file, item);
+
+                parameters += item;
+            }
+
+            JsonObject J = JsonObject::Parse(to_hstring(parameters));
+
+            auto object = J.GetObjectW();
+            BitmapInterpolationMode autoScaleInterpMode;
+
+            std::wstring autoScale = object.GetNamedString(L"AutoScale", L"").c_str();
+            if (!autoScale.empty()) {
+                if (autoScale == L"Nearest") {
+                    m_autoScaleInterpMode = BitmapInterpolationMode::NearestNeighbor;
+                }
+                else if (autoScale == L"Linear") {
+                    m_autoScaleInterpMode = BitmapInterpolationMode::Linear;
+                }
+                else if (autoScale == L"Cubic") {
+                    m_autoScaleInterpMode = BitmapInterpolationMode::Cubic;
+                }
+                else if (autoScale == L"Fant") {
+                    m_autoScaleInterpMode = BitmapInterpolationMode::Fant;
+                }
+                else {
+                    std::wstring scaleLocal;
+                    switch (m_autoScaleInterpMode) {
+                    case BitmapInterpolationMode::NearestNeighbor:
+                        scaleLocal = L"Nearest";
+                        break;
+                    case BitmapInterpolationMode::Linear:
+                        scaleLocal = L"Linear";
+                        break;
+                    case BitmapInterpolationMode::Cubic:
+                        scaleLocal = L"Cubic";
+                        break;
+                    case BitmapInterpolationMode::Fant:
+                        scaleLocal = L"Fant";
+                        break;
+                    }
+                    std::wcout << "NOTE: AutoScale option " << autoScale << " not valid. Set to " << scaleLocal << std::endl;
+                }
+            }
+
+            jsonPreProc(object, L"Scale", m_scaleFactor);
+            jsonPreProc(object, L"MeanStdDevR", m_meanStdDev[0]);
+            jsonPreProc(object, L"MeanStdDevG", m_meanStdDev[1]);
+            jsonPreProc(object, L"MeanStdDevB", m_meanStdDev[2]);
+
+        }
+        file.close();
     }
 }
 

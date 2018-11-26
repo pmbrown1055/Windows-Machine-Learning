@@ -6,6 +6,7 @@ class CommandLineArgs
 public:
     CommandLineArgs();
     void PrintUsage();
+    void jsonPreProc(winrt::Windows::Data::Json::JsonObject const &obj, std::wstring keywStr, float &inputArg);
 
     bool UseGPUHighPerformance() const { return m_useGPUHighPerformance; }
     bool UseGPUMinPower() const { return m_useGPUMinPower; }
