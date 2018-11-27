@@ -60,6 +60,18 @@ Run a model on the CPU and GPU separately, and by binding the input to the CPU a
 Run a model on the CPU with the input bound to the GPU and loaded as an RGB image:
 > WinMLRunner.exe -model c:\\data\\SqueezeNet.onnx -CPU -GPUBoundInput -RGB
 
+### JSON File for input preprocessing
+User can place a JSON file next to the model file. The parameters in Json file is set as default to input preprocessing parameters, autoscale and inputImagePreprocess. All the paramaters in json is of string datatype.
+
+#### Sample JSON file
+  {
+    "AutoScale": "Linear",
+    "Scale": "2.5",
+    "MeanStdDevR": "3.4",
+    "MeanStdDevG": "5.4",
+    "MeanStdDevB": "4" 
+  }
+
 ## Default output
 
 **Running a good model:**
