@@ -129,7 +129,7 @@ void PopulateSessionOptions(LearningModelSessionOptions& sessionOptions)
     // Batch Size Override as 1
     try
     {
-        sessionOptions.BatchSizeOverride(1);
+        sessionOptions.BatchSizeOverride(2);
     }
     catch (...)
     {

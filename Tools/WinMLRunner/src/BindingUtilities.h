@@ -442,7 +442,9 @@ namespace BindingUtilities
             uint32_t outputElementCount = actualSizeInBytes / (channels * sizeof(WriteType));
             if (inputElementCount != outputElementCount)
             {
-                throw hresult_invalid_argument(L"Input size / shape is different from what the model expects");
+                // throw hresult_invalid_argument(L"Input size / shape is different from what the model expects");
+                std::cout << "input element count: " << inputElementCount
+                          << "is not same as output element count: " << outputElementCount << "\n";
             }
 
             float scale;
@@ -494,15 +496,24 @@ namespace BindingUtilities
                     throw hresult_invalid_argument(L"CreateTensor<TKind>: Unknown Tensorize Function");
             }
 
+            int offset = 0;
             switch (inputBufferDesc.channelFormat)
             {
                 case TensorKind::UInt8:
-                    CopyTensorFromBuffer<TKind, uint8_t>(actualData, tensorHeight, tensorWidth, inputBufferDesc, scale,
-                                                         means, stddevs);
+                    for (int i = 0; i < 2; i++) // batch size = 2 
+                    {
+                        CopyTensorFromBuffer<TKind, uint8_t>(actualData + offset, tensorHeight, tensorWidth,
+                                                             inputBufferDesc, scale, means, stddevs);
+                        offset += tensorHeight * tensorWidth * inputBufferDesc.numChannelsPerElement;
+                    }
                     break;
                 case TensorKind::Float:
-                    CopyTensorFromBuffer<TKind, float>(actualData, tensorHeight, tensorWidth, inputBufferDesc, scale,
-                                                       means, stddevs);
+                    for (int i = 0; i < 2; i++)
+                    {
+                        CopyTensorFromBuffer<TKind, float>(actualData + offset, tensorHeight, tensorWidth,
+                                                           inputBufferDesc, scale, means, stddevs);
+                        offset += tensorHeight * tensorWidth * inputBufferDesc.numChannelsPerElement;
+                    }
                     break;
                 default:
                     throw hresult_not_implemented(L"Creating Tensors for Input Images with unhandled channel format!");
@@ -644,7 +655,8 @@ namespace BindingUtilities
         if (tensorDescriptor)
         {
             IVectorView<int64_t> tensorShape = tensorDescriptor.Shape();
-            for (uint32_t dim = 0; dim < tensorShape.Size(); dim++)
+            shape.push_back(2); // batch Size = 2
+            for (uint32_t dim = 1; dim < tensorShape.Size(); dim++)
             {
                 int64_t dimSize = tensorShape.GetAt(dim);
                 if (dimSize > 0) // If the dimension is greater than 0, then it is known.
