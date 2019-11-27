@@ -13,7 +13,7 @@ std::vector<ILearningModelFeatureValue> GenerateInputFeatures(const LearningMode
                                                               InputBindingType inputBindingType,
                                                               InputDataType inputDataType,
                                                               const LearningModelDeviceWithMetadata& device, uint32_t iterationNum,
-                                                              const std::wstring& imagePath)
+                                                              const std::wstring& imagePath, std::vector<SoftwareBitmap>& softwareBitmaps, const uint32_t imageNum)
 {
     std::vector<ILearningModelFeatureValue> inputFeatures;
     if (!imagePath.empty() && (!args.TerseOutput() || args.TerseOutput() && iterationNum == 0))
@@ -37,9 +37,25 @@ std::vector<ILearningModelFeatureValue> GenerateInputFeatures(const LearningMode
         }
         else
         {
+            if ((iterationNum == 0) && (imageNum % args.PreLoadImagesLimit() == 0)) //preload images into software bitmaps
+            {
+                int preloadLimit = (args.ImagePaths().size() - imageNum) >= args.PreLoadImagesLimit()
+                            ? args.PreLoadImagesLimit()
+                            : args.ImagePaths().size() - imageNum;
+
+                for (int j = 0; j < preloadLimit; j++)
+                {
+                    softwareBitmaps[j] =
+                        imagePath.empty()
+                            ? BindingUtilities::GenerateGarbageImage(description, inputDataType)
+                            : BindingUtilities::LoadImageFile(description, inputDataType, args.ImagePaths()[j].c_str(),
+                                                              args, iterationNum, colorManagementMode);
+                }
+            }
+
             auto imageFeature = BindingUtilities::CreateBindableImage(
-                description, imagePath, inputBindingType, inputDataType, device.LearningModelDevice.Direct3D11Device(),
-                args, iterationNum, colorManagementMode);
+                softwareBitmaps[imageNum % args.PreLoadImagesLimit()], inputBindingType, inputDataType,
+                device.LearningModelDevice.Direct3D11Device());
             inputFeatures.push_back(imageFeature);
         }
     }
@@ -205,7 +221,8 @@ HRESULT CreateSession(LearningModelSession& session, LearningModel& model, const
 HRESULT BindInputs(LearningModelBinding& context, const LearningModelSession& session,
                    OutputHelper& output, const LearningModelDeviceWithMetadata& device, const CommandLineArgs& args,
                    InputBindingType inputBindingType, InputDataType inputDataType, uint32_t iteration,
-                   Profiler<WINML_MODEL_TEST_PERF>& profiler, const std::wstring& imagePath)
+                   Profiler<WINML_MODEL_TEST_PERF>& profiler, const std::wstring& imagePath,
+                   std::vector<SoftwareBitmap>& softwareBitmaps, const uint32_t imageNum)
 {
     if (device.DeviceType == DeviceType::CPU && inputDataType == InputDataType::Tensor &&
         inputBindingType == InputBindingType::GPU)
@@ -223,7 +240,8 @@ HRESULT BindInputs(LearningModelBinding& context, const LearningModelSession& se
     std::vector<ILearningModelFeatureValue> inputFeatures;
     try
     {
-        inputFeatures = GenerateInputFeatures(session.Model(), args, inputBindingType, inputDataType, device, iteration, imagePath);
+        inputFeatures = GenerateInputFeatures(session.Model(), args, inputBindingType, inputDataType, device, iteration,
+                                              imagePath, softwareBitmaps, imageNum);
     }
     catch (hresult_error hr)
     {
@@ -412,8 +430,8 @@ void PrintIfPIXToolAttached(OutputHelper& output)
 void IterateBindAndEvaluate(const int maxBindAndEvalIterations, int& lastIteration, CommandLineArgs& args, OutputHelper& output,
                             LearningModelSession& session, HRESULT& lastHr,
                             const LearningModelDeviceWithMetadata& device, const InputBindingType inputBindingType,
-                            const InputDataType inputDataType,
-                            Profiler<WINML_MODEL_TEST_PERF>& profiler, const std::wstring& imagePath)
+                            const InputDataType inputDataType, Profiler<WINML_MODEL_TEST_PERF>& profiler,
+                            const std::wstring& imagePath, uint32_t imageNum, std::vector<SoftwareBitmap>& softwareBitmaps)
 {
     Timer iterationTimer;
     for (; lastIteration < maxBindAndEvalIterations; lastIteration++)
@@ -441,7 +459,8 @@ void IterateBindAndEvaluate(const int maxBindAndEvalIterations, int& lastIterati
             }
         }
         LearningModelBinding context(session);
-        lastHr = BindInputs(context, session, output, device, args, inputBindingType, inputDataType, lastIteration, profiler, imagePath);
+        lastHr = BindInputs(context, session, output, device, args, inputBindingType, inputDataType, lastIteration,
+                            profiler, imagePath, softwareBitmaps, imageNum);
         if (FAILED(lastHr))
         {
             break;
@@ -481,11 +500,12 @@ void IterateBindAndEvaluate(const int maxBindAndEvalIterations, int& lastIterati
 void RunBindAndEvaluateOnce(CommandLineArgs& args, OutputHelper& output, LearningModelSession& session,
                             HRESULT& lastHr, const LearningModelDeviceWithMetadata& device,
                             const InputBindingType inputBindingType, const InputDataType inputDataType,
-                            Profiler<WINML_MODEL_TEST_PERF>& profiler, const std::wstring& imagePath)
+                            Profiler<WINML_MODEL_TEST_PERF>& profiler, const std::wstring& imagePath,
+                            const uint32_t imageNum, std::vector<SoftwareBitmap> softwareBitmaps)
 {
     int lastIteration = 0;
     IterateBindAndEvaluate(1, lastIteration, args, output, session, lastHr, device, inputBindingType, inputDataType,
-                           profiler, imagePath);
+                           profiler, imagePath, imageNum, softwareBitmaps);
 }
 
 void WritePerfResults(CommandLineArgs& args, OutputHelper& output, LearningModelSession& session,
@@ -515,18 +535,21 @@ void WritePerfResults(CommandLineArgs& args, OutputHelper& output, LearningModel
 void RunConfiguration(CommandLineArgs& args, OutputHelper& output, LearningModelSession& session, HRESULT& lastHr,
                       const InputBindingType inputBindingType, const InputDataType inputDataType,
                       Profiler<WINML_MODEL_TEST_PERF>& profiler, const std::wstring& modelPath,
-                      const std::wstring& imagePath, const uint32_t sessionCreationIteration, const LearningModelDeviceWithMetadata& device)
+                      const std::wstring& imagePath, const uint32_t sessionCreationIteration,
+                      const LearningModelDeviceWithMetadata& device, uint32_t imageNum,
+                      std::vector<SoftwareBitmap>& softwareBitmaps)
 {
     if (sessionCreationIteration < args.NumSessionCreationIterations() - 1)
     {
-        RunBindAndEvaluateOnce(args, output, session, lastHr, device, inputBindingType, inputDataType, profiler, imagePath);
+        RunBindAndEvaluateOnce(args, output, session, lastHr, device, inputBindingType, inputDataType, profiler,
+                               imagePath, imageNum, softwareBitmaps);
         return;
     }
     else
     {
         int lastIteration = 0;
         IterateBindAndEvaluate(args.NumIterations(), lastIteration, args, output, session, lastHr, device,
-                               inputBindingType, inputDataType, profiler, imagePath);
+                               inputBindingType, inputDataType, profiler, imagePath, imageNum, softwareBitmaps);
         if (args.IsPerformanceCapture() && SUCCEEDED(lastHr))
         {
             WritePerfResults(args, output, session, device, inputBindingType, inputDataType, profiler, modelPath,
@@ -608,18 +631,24 @@ int run(CommandLineArgs& args,
                             }
                             if (args.IsImageInput())
                             {
-                                for (const std::wstring& inputImagePath : args.ImagePaths())
+                                int preLoadLimit = args.PreLoadImagesLimit() >= args.ImagePaths().size()
+                                                       ? args.ImagePaths().size()
+                                                       : args.PreLoadImagesLimit();
+                                std::vector<SoftwareBitmap> softwareBitmaps(preLoadLimit, NULL);
+                                for (uint32_t imageNum = 0; imageNum < args.ImagePaths().size(); imageNum++)
                                 {
                                     RunConfiguration(args, output, session, lastHr, inputBindingType, inputDataType,
-                                                     profiler, path, inputImagePath, sessionCreationIteration,
-                                                     learningModelDevice);
+                                                     profiler, path, args.ImagePaths()[imageNum],
+                                                     sessionCreationIteration, learningModelDevice, imageNum,
+                                                     softwareBitmaps);
                                 }
                             }
                             else
                             {
+                                std::vector<SoftwareBitmap> softwareBitmaps(args.PreLoadImagesLimit(), NULL);
                                 RunConfiguration(args, output, session, lastHr, inputBindingType, inputDataType,
-                                                 profiler, path, L"", sessionCreationIteration,
-                                                 learningModelDevice);
+                                                 profiler, path, L"", sessionCreationIteration, learningModelDevice, 0,
+                                                 softwareBitmaps);
                             }
                             // Close and destroy session
                             session.Close();

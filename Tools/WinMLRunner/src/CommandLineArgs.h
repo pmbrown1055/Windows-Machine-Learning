@@ -105,6 +105,7 @@ public:
     uint32_t ThreadInterval() const { return m_threadInterval; } // Thread interval in milliseconds
     uint32_t TopK() const { return m_topK; }
     uint32_t GarbageDataMaxValue() const { return m_garbageDataMaxValue; }
+    uint32_t PreLoadImagesLimit() const { return m_preLoadImagesLimit; }
     bool IsGarbageDataRange() const { return m_garbageDataMaxValue != 0; }
 
     void ToggleCPU(bool useCPU) { m_useCPU = useCPU; }
@@ -141,6 +142,7 @@ public:
     void SetLoadIterations(const uint32_t iterations) { m_numLoadIterations = iterations; }
     void AddPerformanceFileMetadata(const std::string& key, const std::string& value);
     void SetGarbageDataMaxValue(const uint32_t value) { m_garbageDataMaxValue = value; }
+    void SetPreLoadImagesLimit(const uint32_t value) { m_preLoadImagesLimit = value; }
 
     // Stop iterating when total time of iterations after the first iteration exceeds time limit.
     void SetIterationTimeLimit(const double milliseconds)
@@ -201,6 +203,7 @@ private:
     uint32_t m_threadInterval = 0;
     uint32_t m_topK = 1;
     uint32_t m_garbageDataMaxValue = 0;
+    uint32_t m_preLoadImagesLimit = 1;
     std::vector<std::pair<std::string, std::string>> m_perfFileMetadata;
 
     void CheckNextArgument(const std::vector<std::wstring>& args, UINT argIdx, UINT checkIdx = 0);

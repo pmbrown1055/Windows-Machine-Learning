@@ -75,6 +75,8 @@ void CommandLineArgs::PrintUsage()
               << std::endl;
     std::cout << "  -ThreadInterval <milliseconds>: interval time between two thread creations in milliseconds"
               << std::endl;
+    std::cout << "  -PreLoadImagesLimit <number>: maximum number of images that are pre-loaded at bind time"
+              << std::endl;
 }
 
 void CheckAPICall(int return_value)
@@ -368,6 +370,11 @@ CommandLineArgs::CommandLineArgs(const std::vector<std::wstring>& args)
         {
             CheckNextArgument(args, i);
             SetGarbageDataMaxValue(std::stoul(args[++i].c_str()));
+        }
+        else if ((_wcsicmp(args[i].c_str(), L"-PreLoadImagesLimit") == 0))
+        {
+            CheckNextArgument(args, i);
+            SetPreLoadImagesLimit(std::stoul(args[++i].c_str()));
         }
         else
         {

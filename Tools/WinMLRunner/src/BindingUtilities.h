@@ -817,15 +817,9 @@ namespace BindingUtilities
         throw hresult_not_implemented();
     }
 
-    ImageFeatureValue CreateBindableImage(const ILearningModelFeatureDescriptor& featureDescriptor,
-                                          const std::wstring& imagePath, InputBindingType inputBindingType,
-                                          InputDataType inputDataType, const IDirect3DDevice winrtDevice,
-                                          const CommandLineArgs& args, uint32_t iterationNum,
-                                          ColorManagementMode colorManagementMode)
+    ImageFeatureValue CreateBindableImage(const SoftwareBitmap& softwareBitmap, InputBindingType inputBindingType,
+                                          InputDataType inputDataType, const IDirect3DDevice winrtDevice)
     {
-        auto softwareBitmap = imagePath.empty() ? GenerateGarbageImage(featureDescriptor, inputDataType)
-                                                : LoadImageFile(featureDescriptor, inputDataType, imagePath.c_str(),
-                                                                args, iterationNum, colorManagementMode);
         auto videoFrame = CreateVideoFrame(softwareBitmap, inputBindingType, inputDataType, winrtDevice);
         return ImageFeatureValue::CreateFromVideoFrame(videoFrame);
     }
